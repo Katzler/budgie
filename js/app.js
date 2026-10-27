@@ -287,7 +287,7 @@ function viewHome() {
         }
         ${conns.length ? `<br>Hämtat från banken ${timeAgo(lastSync)}` : ""}
       </p>
-      ${diff ? `<button class="btn full" data-act="fixStart">Justera startsaldot så att det stämmer</button>` : ""}`,
+      ${diff ? `<button class="btn full" data-act="fixStart">Justera så att det stämmer med banken</button>` : ""}`,
   });
   S.handlers = {
     sync: () => run(() => syncBank()),
@@ -296,12 +296,10 @@ function viewHome() {
       run(async () => {
         const st = S.db.settings;
         const next = st.start_balance - diff;
-        const msg =
-          `Startsaldot ändras från ${formatKr(st.start_balance)} till ${formatKr(next)}.\n\n` +
-          `Att fördela ${diff > 0 ? "minskar" : "ökar"} med ${formatKr(Math.abs(diff))}. Hinkarna påverkas inte.`;
+        const msg = `Att fördela ${diff > 0 ? "minskar" : "ökar"} med ${formatKr(Math.abs(diff))} så att budgeten stämmer med banken. Hinkarna påverkas inte.`;
         if (!confirm(msg)) return;
         await S.store.update("settings", { id: 1 }, { start_balance: next });
-        toast("Startsaldot justerat");
+        toast("Justerat mot banken");
         await refresh();
       }),
   };
@@ -609,9 +607,7 @@ function viewSettings() {
       <h2 class="section">Budget</h2>
       <form class="card form" data-submit="budget">
         <label>Lönedag (månaden börjar)<input name="day" type="number" min="1" max="28" value="${st.period_start_day}"></label>
-        <label>Startdatum<input name="start_date" type="date" value="${esc(st.start_date || today())}"></label>
-        <label>Startsaldo (kr)<input name="start_balance" inputmode="decimal" value="${st.start_balance / 100}"></label>
-        <p class="muted small">Startsaldot är vad som fanns på kontot på startdatumet. Köp före startdatumet räknas inte.</p>
+        <p class="muted small">Saldot följer banken. Stämmer det inte visas en knapp på startsidan som justerar Att fördela.</p>
         <button class="btn" type="submit">Spara</button>
       </form>
 
@@ -651,9 +647,7 @@ function viewSettings() {
       run(async () => {
         const day = Number(f.get("day"));
         if (!(day >= 1 && day <= 28)) throw new Error("Lönedagen måste vara 1–28");
-        const balance = parseAmountToOre(f.get("start_balance"));
-        if (Number.isNaN(balance)) throw new Error("Ogiltigt startsaldo");
-        await S.store.update("settings", { id: 1 }, { period_start_day: day, start_date: f.get("start_date"), start_balance: balance });
+        await S.store.update("settings", { id: 1 }, { period_start_day: day });
         toast("Sparat");
         await refresh();
       }),
