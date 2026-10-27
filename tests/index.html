@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Budgie-tester</title>
+  <style>
+    body { font: 15px/1.5 system-ui, sans-serif; margin: 16px; background: #fff; color: #111; }
+    .ok { color: #1a7f37; } .fail { color: #cf222e; }
+    pre { white-space: pre-wrap; margin: 0 0 0 1.5em; }
+  </style>
+</head>
+<body>
+  <h1>Budgie-tester</h1>
+  <p id="summary">Kör…</p>
+  <ul id="results"></ul>
+  <script type="module">
+    import { tests } from "./budget.test.js";
+    const ul = document.getElementById("results");
+    let failed = 0;
+    for (const t of tests) {
+      const li = document.createElement("li");
+      try {
+        await t.fn();
+        li.className = "ok";
+        li.textContent = `✓ ${t.name}`;
+      } catch (e) {
+        failed++;
+        li.className = "fail";
+        li.innerHTML = `✗ ${t.name}<pre></pre>`;
+        li.querySelector("pre").textContent = e.message;
+      }
+      ul.append(li);
+    }
+    const summary = document.getElementById("summary");
+    summary.textContent = failed ? `${failed} av ${tests.length} misslyckades` : `Alla ${tests.length} tester gick igenom`;
+    summary.className = failed ? "fail" : "ok";
+    window.testResult = { total: tests.length, failed };
+  </script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+# Funktionerna kontrollerar själva vem som anropar:
+#  - api:   användarens JWT (medlem i hushållet) eller x-cron-secret
+#  - quick: token från Apple Pay-genvägen
+[functions.api]
+verify_jwt = false
+
+[functions.quick]
+verify_jwt = false

@@ -1,0 +1,7 @@
+# Hemligheter hör hemma i Supabase secrets, aldrig i repot
+*.pem
+.env
+.env.*
+supabase/.temp/
+supabase/.branches/
+node_modules/

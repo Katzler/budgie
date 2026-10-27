@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VAPID-nycklar</title>
+  <meta name="robots" content="noindex">
+  <style>
+    :root { --bg: #fff; --text: #111; --code: #f2f2f7; color-scheme: light; }
+    @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #111; --text: #eee; --code: #222; color-scheme: dark; } }
+    :root[data-theme="dark"] { --bg: #111; --text: #eee; --code: #222; color-scheme: dark; }
+    body { font: 16px/1.5 system-ui, sans-serif; max-width: 640px; margin: 0 auto; padding: 16px; background: var(--bg); color: var(--text); }
+    code { display: block; background: var(--code); padding: 10px; border-radius: 8px; word-break: break-all; user-select: all; margin: 4px 0 16px; }
+    button { font: inherit; padding: 10px 16px; border-radius: 10px; border: 0; background: #2f6fde; color: #fff; }
+  </style>
+</head>
+<body>
+  <h1>VAPID-nycklar för notiser</h1>
+  <p>Nycklarna skapas här i webbläsaren och skickas ingenstans.</p>
+  <button id="go">Skapa nycklar</button>
+  <div id="out"></div>
+  <script type="module">
+    const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    document.getElementById("go").onclick = async () => {
+      const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+      const publicKey = b64url(await crypto.subtle.exportKey("raw", pair.publicKey));
+      const privateKey = (await crypto.subtle.exportKey("jwk", pair.privateKey)).d;
+      const out = document.getElementById("out");
+      out.innerHTML = `
+        <p><b>VAPID_PUBLIC_KEY</b> – in i <i>js/config.js</i> och som secret i Supabase:</p><code></code>
+        <p><b>VAPID_PRIVATE_KEY</b> – bara som secret i Supabase, aldrig i koden:</p><code></code>`;
+      const codes = out.querySelectorAll("code");
+      codes[0].textContent = publicKey;
+      codes[1].textContent = privateKey;
+    };
+  </script>
+</body>
+</html>
