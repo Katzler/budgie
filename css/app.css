@@ -117,6 +117,12 @@ main {
 .row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; color: inherit; min-height: 52px; }
 .row + .row { border-top: 1px solid var(--line); }
 .row.add { color: var(--accent); font-weight: 500; }
+.row.sortable { padding-right: 4px; gap: 4px; }
+.row-link { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; color: inherit; }
+.move { display: flex; flex-direction: column; }
+.move .icon-btn { height: 26px; }
+.move .icon-btn:disabled { opacity: 0.25; cursor: default; }
+.move .icon-btn svg { width: 20px; height: 20px; }
 .row-main { flex: 1; min-width: 0; }
 .row-title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row-sub { font-size: 13px; color: var(--muted); margin-top: 1px; }

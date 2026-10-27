@@ -73,6 +73,11 @@ async function run(fn) {
 
 const activeBuckets = () =>
   S.db.buckets.filter((b) => !b.archived).sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, "sv"));
+/** Hinkarna i samma ordning som på startsidan: gemensamma först, sedan privata. */
+const orderedBuckets = () => {
+  const list = activeBuckets();
+  return [...list.filter((b) => b.kind !== "personal"), ...list.filter((b) => b.kind === "personal")];
+};
 const bucketById = (id) => S.db.buckets.find((b) => b.id === id);
 const memberName = (id) => S.db.members.find((m) => m.user_id === id)?.name ?? "";
 const inBudget = (t) => !S.db.settings.start_date || t.date >= S.db.settings.start_date;
@@ -135,6 +140,8 @@ const icons = {
   gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
   refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/>',
   back: '<path d="M15 18l-6-6 6-6"/>',
+  up: '<path d="M6 15l6-6 6 6"/>',
+  down: '<path d="M6 9l6 6 6-6"/>',
 };
 const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name]}</svg>`;
 
@@ -563,14 +570,25 @@ function viewTransfer() {
 function viewSettings() {
   const st = S.db.settings;
   const sumMonthly = activeBuckets().reduce((a, b) => a + b.monthly_amount, 0);
+  const ordered = orderedBuckets();
+  // Hinkar kan bara flyttas inom sin grupp, eftersom startsidan visar grupperna var för sig.
+  const sameGroup = (a, b) => a && b && (a.kind === "personal") === (b.kind === "personal");
   const conn = S.db.bank_connections[0];
   page({
     title: "Inställningar",
     body: `
       <h2 class="section">Hinkar <span class="muted">${kr(sumMonthly)}/mån</span></h2>
       <div class="card list">
-        ${activeBuckets()
-          .map((b) => `<a class="row" href="#/installningar/hink/${b.id}"><div class="bucket-icon">${esc(b.icon)}</div><div class="row-main"><div class="row-title">${esc(b.name)}</div><div class="row-sub">${{ spending: "Löpande", savings: "Sparhink", personal: `Privat · ${esc(memberName(b.owner_id))}` }[b.kind]}</div></div><div class="row-amount">${kr(b.monthly_amount)}</div></a>`)
+        ${ordered
+          .map(
+            (b, i) => `<div class="row sortable">
+              <a class="row-link" href="#/installningar/hink/${b.id}"><div class="bucket-icon">${esc(b.icon)}</div><div class="row-main"><div class="row-title">${esc(b.name)}</div><div class="row-sub">${{ spending: "Löpande", savings: "Sparhink", personal: `Privat · ${esc(memberName(b.owner_id))}` }[b.kind]}</div></div><div class="row-amount">${kr(b.monthly_amount)}</div></a>
+              <div class="move">
+                <button class="icon-btn small" data-act="move" data-id="${b.id}" data-dir="-1" aria-label="Flytta upp" ${sameGroup(b, ordered[i - 1]) ? "" : "disabled"}>${icon("up")}</button>
+                <button class="icon-btn small" data-act="move" data-id="${b.id}" data-dir="1" aria-label="Flytta ner" ${sameGroup(b, ordered[i + 1]) ? "" : "disabled"}>${icon("down")}</button>
+              </div>
+            </div>`,
+          )
           .join("")}
         <a class="row add" href="#/installningar/hink/ny">＋ Ny hink</a>
       </div>
@@ -608,6 +626,27 @@ function viewSettings() {
   });
   pushStatus();
   S.handlers = {
+    // Visar den nya ordningen direkt och sparar sedan. Alla hinkar numreras om
+    // 0, 1, 2 … så att ordningen blir entydig även om flera hade samma nummer.
+    move: (el) =>
+      run(async () => {
+        const list = orderedBuckets();
+        const i = list.findIndex((b) => b.id === el.dataset.id);
+        const j = i + Number(el.dataset.dir);
+        if (!sameGroup(list[i], list[j])) return;
+        [list[i], list[j]] = [list[j], list[i]];
+        const changed = list.flatMap((b, n) => (b.sort_order === n ? [] : [[b, n]]));
+        for (const [b, n] of changed) b.sort_order = n;
+        const y = scrollY;
+        viewSettings();
+        scrollTo(0, y);
+        try {
+          await Promise.all(changed.map(([b, n]) => S.store.update("buckets", { id: b.id }, { sort_order: n })));
+        } catch (e) {
+          await refresh();
+          throw e;
+        }
+      }),
     budget: (f) =>
       run(async () => {
         const day = Number(f.get("day"));
@@ -631,7 +670,7 @@ function viewSettings() {
 
 function viewBucketEdit(id) {
   const isNew = id === "ny";
-  const b = isNew ? { name: "", icon: "🪣", kind: "spending", owner_id: null, monthly_amount: 0, sort_order: S.db.buckets.length } : bucketById(id);
+  const b = isNew ? { name: "", icon: "🪣", kind: "spending", owner_id: null, monthly_amount: 0, sort_order: Math.max(-1, ...S.db.buckets.map((x) => x.sort_order)) + 1 } : bucketById(id);
   if (!b) return viewSettings();
   const balance = isNew ? 0 : S.budget.buckets.get(id).balance;
   page({
@@ -654,7 +693,6 @@ function viewBucketEdit(id) {
         </select></label>
         <label>Månadsbelopp (kr)<input name="monthly" inputmode="decimal" value="${b.monthly_amount / 100}"></label>
         ${isNew ? "" : `<label class="toggle"><input type="checkbox" name="thisMonth"> Ändra även den här månadens påfyllning</label>`}
-        <label>Ordning<input name="sort" type="number" value="${b.sort_order}"></label>
         <button class="btn primary" type="submit">Spara</button>
       </form>
       ${isNew ? "" : `<button class="btn danger full" data-act="archive">Ta bort hinken</button><p class="muted small center">${balance ? `Saldot (${kr(balance)}) flyttas till Att fördela.` : ""} Gamla köp blir osorterade.</p>`}`,
@@ -670,10 +708,9 @@ function viewBucketEdit(id) {
           kind: f.get("kind"),
           owner_id: f.get("kind") === "personal" ? f.get("owner") || null : null,
           monthly_amount: monthly,
-          sort_order: Number(f.get("sort")) || 0,
         };
         if (isNew) {
-          const [created] = await S.store.insert("buckets", [row]);
+          const [created] = await S.store.insert("buckets", [{ ...row, sort_order: b.sort_order }]);
           toast("Hinken skapad");
           await reloadAndGo(`#/hink/${created.id}`);
         } else {
