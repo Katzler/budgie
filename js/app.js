@@ -279,9 +279,25 @@ function viewHome() {
               : `⚠️ Budgeten (${kr(B.total)}) skiljer ${kr(Math.abs(diff))} mot banken (${kr(bankBalance)})`
         }
         ${conns.length ? `<br>Hämtat från banken ${timeAgo(lastSync)}` : ""}
-      </p>`,
+      </p>
+      ${diff ? `<button class="btn full" data-act="fixStart">Justera startsaldot så att det stämmer</button>` : ""}`,
   });
-  S.handlers = { sync: () => run(() => syncBank()) };
+  S.handlers = {
+    sync: () => run(() => syncBank()),
+    // Skillnaden mot banken beror nästan alltid på att startsaldot var fel.
+    fixStart: () =>
+      run(async () => {
+        const st = S.db.settings;
+        const next = st.start_balance - diff;
+        const msg =
+          `Startsaldot ändras från ${formatKr(st.start_balance)} till ${formatKr(next)}.\n\n` +
+          `Att fördela ${diff > 0 ? "minskar" : "ökar"} med ${formatKr(Math.abs(diff))}. Hinkarna påverkas inte.`;
+        if (!confirm(msg)) return;
+        await S.store.update("settings", { id: 1 }, { start_balance: next });
+        toast("Startsaldot justerat");
+        await refresh();
+      }),
+  };
 }
 
 function bucketRow(b) {
