@@ -769,7 +769,7 @@ function viewBank() {
               <button class="btn primary full" data-act="connect">Koppla Swedbank med BankID</button>
             </div>`
       }
-      <p class="muted small center">Slå av konton ni inte vill följa, t.ex. sparkonton.</p>`,
+      <p class="muted small center">Slå bara på ert gemensamma lönekonto. Flyttar till sparkonton registreras då som utgifter eller överföringar från det kontot.</p>`,
   });
   S.handlers = {
     connect: () =>
@@ -781,7 +781,8 @@ function viewBank() {
     toggle: (el) =>
       run(async () => {
         await S.store.update("bank_connections", { id: el.dataset.id }, { enabled: el.checked });
-        await reload();
+        if (el.checked) await syncBank();
+        else await refresh();
       }),
   };
 }
@@ -1048,6 +1049,10 @@ async function handleBankCallback() {
   if (params.has("error")) return toast(`Bankkopplingen avbröts: ${params.get("error_description") || params.get("error")}`, "error");
   await run(async () => {
     const result = await S.store.api("session", { code: params.get("code"), state: params.get("state") });
+    if (!result.enabled) {
+      await refresh();
+      return toast(`Swedbank kopplat (${result.accounts} konton). Slå på ert gemensamma lönekonto nedan.`);
+    }
     toast(`Swedbank kopplat (${result.accounts} konto${result.accounts === 1 ? "" : "n"})`);
     await syncBank({ silent: true });
   });

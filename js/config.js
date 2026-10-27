@@ -4,5 +4,5 @@
 export const config = {
   SUPABASE_URL: "https://cojuuewwzpdkbwtrgafa.supabase.co",
   SUPABASE_KEY: "sb_publishable_QVoObeyl8PpW9XQAW7oH7w_xPgZ8AOd", // publishable/anon key, aldrig service role!
-  VAPID_PUBLIC_KEY: "",
+  VAPID_PUBLIC_KEY: "BM0s3ye88lElHgsPgSjN6-z3YpEprJrrHARzqKjexhKcVusKNEO3rr0Hqebt4GWRDtYRgAJYERZCpMBj7nYAvq4",
 };

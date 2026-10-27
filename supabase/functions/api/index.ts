@@ -53,6 +53,8 @@ Deno.serve(
 
         const session = await eb("/sessions", { method: "POST", body: { code: body.code } });
         const existing = check(await db.from("bank_connections").select("*")) as any[];
+        // Med flera konton följs inget automatiskt; ni väljer ert gemensamma konto i appen.
+        const enableNew = (session.accounts?.length ?? 0) === 1;
         let total = 0;
         for (const acc of session.accounts ?? []) {
           const iban = acc.account_id?.iban ?? null;
@@ -68,7 +70,8 @@ Deno.serve(
           // Vid förnyelse får kontot ett nytt uid hos banken; behåll vår rad (och historiken) via IBAN.
           const old = existing.find((c) => (iban && c.iban === iban) || c.account_uid === acc.uid);
           if (old) check(await db.from("bank_connections").update(row).eq("id", old.id));
-          else check(await db.from("bank_connections").insert(row));
+          else check(await db.from("bank_connections").insert({ ...row, enabled: enableNew }));
+          if (!(old?.enabled ?? enableNew)) continue;
           try {
             const { balances } = await eb(`/accounts/${acc.uid}/balances`);
             total += pickBalance(balances ?? []) ?? 0;
@@ -81,7 +84,8 @@ Deno.serve(
         if (!settings.start_date) {
           check(await db.from("settings").update({ start_date: todayInSweden(), start_balance: total }).eq("id", 1));
         }
-        return json({ accounts: session.accounts?.length ?? 0 });
+        const enabled = (check(await db.from("bank_connections").select("id").eq("enabled", true)) as any[]).length;
+        return json({ accounts: session.accounts?.length ?? 0, enabled });
       }
 
       case "push-test": {
