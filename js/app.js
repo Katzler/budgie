@@ -10,7 +10,7 @@ import {
   periodFor,
   parseISODate,
 } from "../supabase/functions/_shared/budget.js";
-import { classify, matchRule, suggestPattern, defaultRulesFor } from "../supabase/functions/_shared/categorize.js";
+import { matchRule, suggestPattern, defaultRulesFor } from "../supabase/functions/_shared/categorize.js";
 
 const app = document.getElementById("app");
 const S = { store: null, session: null, db: null, me: null, budget: null, handlers: {} };
@@ -137,7 +137,6 @@ async function syncBank({ silent = false } = {}) {
 const icons = {
   home: '<path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>',
   list: '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>',
-  plus: '<path d="M12 5v14M5 12h14"/>',
   gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
   refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/>',
   back: '<path d="M15 18l-6-6 6-6"/>',
@@ -166,7 +165,6 @@ function page({ title, back, action = "", body, tabs = true }) {
         ? `<nav class="tabbar">
         ${tab("#/", "home", "Hem")}
         ${tab("#/transaktioner", "list", "Transaktioner", count)}
-        ${tab("#/ny", "plus", "Nytt köp")}
         ${tab("#/installningar", "gear", "Inställningar")}
       </nav>`
         : ""
@@ -197,10 +195,9 @@ function txRow(t, { showBucket = true } = {}) {
   </a>`;
 }
 
-function bucketOptions(selected, { includeAttFordela = false, includeIncome = false, includeNone = false } = {}) {
+function bucketOptions(selected, { includeAttFordela = false, includeIncome = false } = {}) {
   const B = S.budget.buckets;
   return [
-    includeNone ? `<option value="">Välj automatiskt</option>` : "",
     includeAttFordela ? `<option value="" ${selected === "" ? "selected" : ""}>💰 Att fördela (${krR(S.budget.attFordela)})</option>` : "",
     includeIncome ? `<option value="income" ${selected === "income" ? "selected" : ""}>💰 Inkomst / Att fördela</option>` : "",
     ...activeBuckets().map(
@@ -506,39 +503,6 @@ function viewTx(id) {
         if (!confirm("Ta bort köpet?")) return;
         await S.store.remove("transactions", { id });
         await reloadAndGo(listHash);
-      }),
-  };
-}
-
-function viewNewTx() {
-  page({
-    title: "Nytt köp",
-    body: `
-      <form class="card form" data-submit="add">
-        <div class="segmented">
-          <label><input type="radio" name="kind" value="expense" checked><span>Utgift</span></label>
-          <label><input type="radio" name="kind" value="income"><span>Inkomst</span></label>
-        </div>
-        <label>Belopp (kr)<input name="amount" inputmode="decimal" placeholder="0" required autofocus></label>
-        <label>Vad<input name="description" placeholder="T.ex. Bio med vänner" required></label>
-        <label>Datum<input name="date" type="date" value="${today()}" required></label>
-        <label>Hink<select name="bucket">${bucketOptions("", { includeNone: true })}</select></label>
-        <button class="btn primary" type="submit">Lägg till</button>
-      </form>
-      <p class="muted small center">Köp med kortet kommer in automatiskt från banken. Här lägger ni in sådant som betalats på annat sätt, t.ex. kontanter.</p>`,
-  });
-  S.handlers = {
-    add: (f) =>
-      run(async () => {
-        const ore = Math.abs(parseAmountToOre(f.get("amount")));
-        if (!ore) throw new Error("Ange ett belopp");
-        const kind = f.get("kind");
-        const tx = { date: f.get("date"), amount: kind === "income" ? ore : -ore, description: f.get("description").trim(), status: "manual", created_by: S.me.user_id };
-        let cls = { kind, bucket_id: null, categorized_by: "none" };
-        if (kind === "expense") cls = f.get("bucket") ? { kind, bucket_id: f.get("bucket"), categorized_by: "user" } : classify(tx, S.db.rules);
-        await S.store.insert("transactions", [{ ...tx, ...cls }]);
-        toast("Tillagt");
-        await reloadAndGo(cls.bucket_id ? `#/hink/${cls.bucket_id}` : "#/");
       }),
   };
 }
@@ -1055,7 +1019,6 @@ const routes = [
   [/^#\/sortera$/, viewTransactions], // gamla länkar i push-notiser
   [/^#\/hink\/([^/]+)$/, viewBucket],
   [/^#\/tx\/([^/]+)$/, viewTx],
-  [/^#\/ny$/, viewNewTx],
   [/^#\/flytta$/, viewTransfer],
   [/^#\/installningar$/, viewSettings],
   [/^#\/installningar\/hink\/([^/]+)$/, viewBucketEdit],
