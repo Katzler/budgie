@@ -136,9 +136,8 @@ async function syncBank({ silent = false } = {}) {
 
 const icons = {
   home: '<path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>',
-  inbox: '<path d="M4 4h16v10h-5l-1.5 2h-3L9 14H4z"/><path d="M4 14v6h16v-6"/>',
+  list: '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
-  swap: '<path d="M7 7h12l-3-3M17 17H5l3 3"/>',
   gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
   refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/>',
   back: '<path d="M15 18l-6-6 6-6"/>',
@@ -166,9 +165,8 @@ function page({ title, back, action = "", body, tabs = true }) {
       tabs
         ? `<nav class="tabbar">
         ${tab("#/", "home", "Hem")}
-        ${tab("#/sortera", "inbox", "Sortera", count)}
+        ${tab("#/transaktioner", "list", "Transaktioner", count)}
         ${tab("#/ny", "plus", "Nytt köp")}
-        ${tab("#/flytta", "swap", "Flytta")}
         ${tab("#/installningar", "gear", "Inställningar")}
       </nav>`
         : ""
@@ -275,7 +273,7 @@ function viewHome() {
             </a>`
           : ""
       }
-      ${B.uncategorizedCount ? `<a class="card notice" href="#/sortera">📥 ${B.uncategorizedCount} köp att sortera (${krR(B.uncategorized)}) →</a>` : ""}
+      ${B.uncategorizedCount ? `<a class="card notice" href="#/transaktioner">📥 ${B.uncategorizedCount} köp att sortera (${krR(B.uncategorized)}) →</a>` : ""}
       ${group("Gemensamma", buckets.filter((b) => b.kind !== "personal"))}
       ${group("Privata", buckets.filter((b) => b.kind === "personal"))}
       <p class="footer-note muted small">
@@ -327,28 +325,57 @@ function bucketRow(b) {
   </a>`;
 }
 
-function viewSort() {
-  const list = S.db.transactions.filter((t) => t.kind === "expense" && !t.bucket_id && inBudget(t));
+let txLimit = 60;
+
+function viewTransactions() {
+  const all = S.db.transactions.filter(inBudget);
+  const unsorted = all.filter((t) => t.kind === "expense" && !t.bucket_id);
+  const sorted = all.filter((t) => !(t.kind === "expense" && !t.bucket_id));
+  const shown = sorted.slice(0, txLimit);
+  const byMonth = new Map();
+  for (const t of shown) {
+    const key = periodFor(t.date, S.db.settings.period_start_day).key;
+    if (!byMonth.has(key)) byMonth.set(key, []);
+    byMonth.get(key).push(t);
+  }
   let remember = true;
   try {
     remember = localStorage.getItem("budgie-remember") !== "0";
   } catch {}
   page({
-    title: "Sortera",
-    body: list.length
-      ? `<label class="toggle card"><input type="checkbox" id="remember" ${remember ? "checked" : ""}> Kom ihåg butiken till nästa gång</label>
-         ${list
-           .map(
-             (t) => `<div class="card sort-item" data-tx="${t.id}">
-               <div class="sort-head"><div><div class="row-title">${esc(t.description)}</div><div class="row-sub">${relDate(t.date)}${t.status === "pending" ? " · Kommande" : ""}</div></div>
-               <div class="row-amount">${kr(t.amount, { sign: true })}</div></div>
-               ${bucketChips(null)}
-             </div>`,
-           )
-           .join("")}`
-      : `<div class="empty">🎉<p>Allt är sorterat!</p></div>`,
+    title: "Transaktioner",
+    body: `
+      ${
+        unsorted.length
+          ? `<h2 class="section">Att sortera <span class="muted">${unsorted.length} st · ${krR(unsorted.reduce((a, t) => a + t.amount, 0))}</span></h2>
+             ${unsorted
+               .map(
+                 (t, i) => `<div class="card sort-item${i === 0 ? " open" : ""}" data-tx="${t.id}">
+                   <button type="button" class="sort-head" data-act="expand">
+                     <div class="row-main"><div class="row-title">${esc(t.description)}</div><div class="row-sub">${relDate(t.date)}${t.status === "pending" ? " · Kommande" : ""}</div></div>
+                     <div class="row-amount">${kr(t.amount, { sign: true })}</div>${icon("down")}
+                   </button>
+                   <div class="sort-body">${bucketChips(null)}</div>
+                 </div>`,
+               )
+               .join("")}
+             <label class="toggle remember"><input type="checkbox" id="remember" ${remember ? "checked" : ""}> Kom ihåg butiken till nästa gång</label>`
+          : ""
+      }
+      ${[...byMonth.entries()]
+        .map(([key, list]) => `<h2 class="section">${monthLabel(key)}</h2><div class="card list">${list.map((t) => txRow(t)).join("")}</div>`)
+        .join("")}
+      ${sorted.length > txLimit ? `<button class="btn full more" data-act="more">Visa fler</button>` : ""}
+      ${all.length ? "" : `<div class="empty">🧾<p>Inga transaktioner än.</p></div>`}`,
   });
   S.handlers = {
+    expand: (el) => el.closest(".sort-item").classList.toggle("open"),
+    more: () => {
+      const y = window.scrollY;
+      txLimit += 60;
+      render();
+      window.scrollTo(0, y);
+    },
     pick: (el) =>
       run(async () => {
         const item = el.closest("[data-tx]");
@@ -433,7 +460,7 @@ function viewTx(id) {
   const statusText = { pending: "Kommande dragning, inte bokförd än", booked: "Bokförd", manual: "Inlagd för hand", quick: "Från Apple Pay-genvägen" }[t.status];
   page({
     title: "Köp",
-    back: "#/",
+    back: listHash,
     body: `
       <div class="card hero">
         <div class="huge ${t.amount > 0 ? "pos" : ""}">${kr(t.amount, { sign: true })}</div>
@@ -478,7 +505,7 @@ function viewTx(id) {
       run(async () => {
         if (!confirm("Ta bort köpet?")) return;
         await S.store.remove("transactions", { id });
-        await reloadAndGo("#/");
+        await reloadAndGo(listHash);
       }),
   };
 }
@@ -524,6 +551,7 @@ function viewTransfer() {
   const name = (id) => (id ? `${bucketById(id)?.icon ?? ""} ${bucketById(id)?.name ?? "?"}` : "💰 Att fördela");
   page({
     title: "Flytta pengar",
+    back: q.get("from") ? `#/hink/${q.get("from")}` : q.get("to") ? `#/hink/${q.get("to")}` : "#/",
     body: `
       <form class="card form" data-submit="transfer">
         <label>Från<select name="from">${bucketOptions(from, { includeAttFordela: true })}</select></label>
@@ -1023,7 +1051,8 @@ async function enablePush() {
 
 const routes = [
   [/^#?\/?$/, viewHome],
-  [/^#\/sortera$/, viewSort],
+  [/^#\/transaktioner$/, viewTransactions],
+  [/^#\/sortera$/, viewTransactions], // gamla länkar i push-notiser
   [/^#\/hink\/([^/]+)$/, viewBucket],
   [/^#\/tx\/([^/]+)$/, viewTx],
   [/^#\/ny$/, viewNewTx],
@@ -1035,8 +1064,10 @@ const routes = [
   [/^#\/installningar\/genvag$/, viewShortcut],
   [/^#\/kom-igang$/, viewSetup],
 ];
-const LIVE_VIEWS = [viewHome, viewSort, viewBucket];
+const LIVE_VIEWS = [viewHome, viewTransactions, viewBucket];
 let currentView = null;
+/** Listan man senast tittade på, dit köpvyn går tillbaka. */
+let listHash = "#/";
 
 function render() {
   if (!S.session) return viewLogin();
@@ -1050,6 +1081,7 @@ function render() {
     const m = hash.match(re);
     if (m) {
       currentView = view;
+      if (LIVE_VIEWS.includes(view)) listHash = hash || "#/";
       return view(...m.slice(1));
     }
   }
