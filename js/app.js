@@ -264,7 +264,6 @@ function viewHome() {
 
   page({
     title: `${monthLabel(p.key)}`,
-    action: conns.length ? `<button class="icon-btn" data-act="sync" aria-label="Hämta från banken">${icon("refresh")}</button>` : "",
     body: `
       <p class="period muted">${shortDate(p.start)} – ${shortDate(p.end)} · ${daysLeft} ${daysLeft === 1 ? "dag" : "dagar"} kvar</p>
       ${
@@ -292,7 +291,6 @@ function viewHome() {
       ${diff ? `<button class="btn full" data-act="fixStart">Justera så att det stämmer med banken</button>` : ""}`,
   });
   S.handlers = {
-    sync: () => run(() => syncBank()),
     // Skillnaden mot banken beror nästan alltid på att startsaldot var fel.
     fixStart: () =>
       run(async () => {
@@ -1078,6 +1076,72 @@ app.addEventListener("submit", (e) => {
   S.handlers[form.dataset.submit]?.(new FormData(form), form);
 });
 window.addEventListener("hashchange", render);
+
+// --- Dra ner för att uppdatera ------------------------------------------------
+
+const PULL_TRIGGER = 80;
+const PULL_MAX = 130;
+const ptr = document.createElement("div");
+ptr.className = "ptr";
+ptr.innerHTML = icon("refresh");
+document.body.append(ptr);
+let pull = null; // { x, y, dist } medan ett finger drar
+let pullBusy = false;
+
+function showPull(dist) {
+  ptr.style.transform = `translate(-50%, ${dist - 40}px) rotate(${dist * 3}deg)`;
+  ptr.style.opacity = Math.min(dist / PULL_TRIGGER, 1);
+  ptr.classList.toggle("ready", dist >= PULL_TRIGGER);
+}
+function hidePull() {
+  ptr.classList.add("settle");
+  ptr.classList.remove("ready", "spin");
+  showPull(0);
+}
+
+document.addEventListener(
+  "touchstart",
+  (e) => {
+    if (pullBusy || e.touches.length > 1 || window.scrollY > 0 || !LIVE_VIEWS.includes(currentView)) return;
+    pull = { x: e.touches[0].clientX, y: e.touches[0].clientY, dist: 0 };
+    ptr.classList.remove("settle");
+  },
+  { passive: true },
+);
+document.addEventListener(
+  "touchmove",
+  (e) => {
+    if (!pull) return;
+    const dx = e.touches[0].clientX - pull.x;
+    const dy = e.touches[0].clientY - pull.y;
+    // Sidledes eller uppåt: vanlig scroll, inte uppdatering.
+    if (!pull.dist && (dy <= 0 || Math.abs(dx) > dy)) {
+      pull = null;
+      return;
+    }
+    e.preventDefault();
+    pull.dist = Math.min(Math.max(dy, 0) * 0.5, PULL_MAX);
+    showPull(pull.dist);
+  },
+  { passive: false },
+);
+document.addEventListener("touchend", async () => {
+  if (!pull) return;
+  const ready = pull.dist >= PULL_TRIGGER;
+  pull = null;
+  if (!ready) return hidePull();
+  pullBusy = true;
+  ptr.classList.add("settle", "spin");
+  ptr.style.transform = `translate(-50%, ${PULL_TRIGGER - 40}px)`;
+  const hasBank = S.db.bank_connections.some((c) => c.enabled);
+  await run(() => (hasBank ? syncBank() : refresh()));
+  pullBusy = false;
+  hidePull();
+});
+document.addEventListener("touchcancel", () => {
+  pull = null;
+  hidePull();
+});
 
 /** Hämtar från banken när appen öppnas, om det var ett tag sedan. */
 async function autoSync() {
