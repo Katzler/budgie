@@ -4,6 +4,7 @@ import {
   periodStartsBetween,
   missingAllocations,
   computeBudget,
+  activeTransactions,
   parseAmountToOre,
   formatKr,
 } from "../supabase/functions/_shared/budget.js";
@@ -233,4 +234,18 @@ test("bokförd transaktion matchas mot reserverad", () => {
   eq(findMatchForBooked({ amount: -34250, date: "2026-11-04" }, cands).id, "b");
   eq(findMatchForBooked({ amount: -999, date: "2026-11-09" }, cands)?.id, undefined);
   eq(findMatchForBooked({ amount: -999, date: "2026-11-08" }, cands).id, "d");
+});
+
+test("rader från avstängda bankkonton räknas inte", () => {
+  const conns = [
+    { id: "på", enabled: true },
+    { id: "av", enabled: false },
+  ];
+  const txs = [
+    { id: "a", connection_id: "på" },
+    { id: "b", connection_id: "av" },
+    { id: "c", connection_id: null },
+  ];
+  eq(activeTransactions(txs, conns).map((t) => t.id).join(","), "a,c");
+  eq(activeTransactions(txs, []).length, 3);
 });

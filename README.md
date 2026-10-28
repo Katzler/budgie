@@ -130,7 +130,9 @@ Lön och flyttar till och från sparkonton är *inkomster*: de påverkar Att fö
 
 **Regler:** när ni sorterar ett köp kommer appen ihåg butiken, t.ex. "ica maxi" → Livsmedel. Den längsta matchande regeln vinner. Det finns färdiga svenska regler för vanliga butiker.
 
-**Reserverat → bokfört:** ett kortköp syns först som reserverat. När banken bokför det kopplas det ihop med den reserverade raden (samma belopp, inom ±5 dagar), och hinken följer med. Köp från Apple Pay-genvägen kopplas ihop på samma sätt.
+**Kommande → bokfört:** dragningar som banken har registrerat men inte bokfört, t.ex. autogiro, syns som *Kommande* med bankens ofta förkortade text. När dragningen bokförs kopplas den ihop med den kommande raden (samma belopp och konto, inom ±5 dagar). Hinken följer med och texten byts mot den bokförda. Köp från Apple Pay-genvägen kopplas ihop på samma sätt men behåller sitt handlarnamn. Swedbank skickar inte kortreservationer, så kortköp dyker upp först när de bokförs.
+
+**Avstängda konton:** rader från ett bankkonto som är avstängt under Inställningar → Bankkoppling räknas inte med och visas inte. Slås kontot på igen kommer de tillbaka.
 
 ## Filer
 

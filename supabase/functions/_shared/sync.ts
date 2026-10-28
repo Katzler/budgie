@@ -67,7 +67,7 @@ async function syncConnection(db: Db, conn: any, settings: any, rules: any[], to
   const fetched = await Promise.all(raws.map((r) => toTransaction(r, conn.id)));
   const fetchedIds = new Set(fetched.map((t) => t.external_id));
 
-  // Befintliga rader i fönstret: för dubblettkontroll och matchning reserverad → bokförd.
+  // Befintliga rader i fönstret: för dubblettkontroll och matchning kommande → bokförd.
   const existing = check(
     await db.from("transactions").select("*").gte("date", addDays(dateFrom, -10)),
   ) as any[];
@@ -85,24 +85,28 @@ async function syncConnection(db: Db, conn: any, settings: any, rules: any[], to
       }
       continue;
     }
-    // En bokförd rad kan motsvara en reserverad eller en från Apple Pay-genvägen.
-    // En reserverad rad kan bara motsvara en från genvägen.
-    const candidates = existing.filter((c) => !consumed.has(c.id) && (tx.status === "booked" || c.status === "quick"));
+    // En bokförd rad kan motsvara en kommande från samma konto eller en från Apple Pay-genvägen.
+    // En kommande rad kan bara motsvara en från genvägen.
+    const candidates = existing.filter(
+      (c) => !consumed.has(c.id) && (c.status === "quick" || (tx.status === "booked" && c.connection_id === conn.id)),
+    );
     const match = findMatchForBooked(tx, candidates);
     if (match) {
       consumed.add(match.id);
-      check(
-        await db
-          .from("transactions")
-          .update({ external_id: tx.external_id, connection_id: conn.id, status: tx.status, date: tx.date, counterparty: tx.counterparty, raw: tx.raw })
-          .eq("id", match.id),
-      );
+      const patch: any = { external_id: tx.external_id, connection_id: conn.id, status: tx.status, date: tx.date, counterparty: tx.counterparty, raw: tx.raw };
+      // Bankens text på en kommande rad är ofta förkortad ("TSB"); den bokförda är tydligare.
+      // Handlarnamnet från genvägen behålls.
+      if (match.status === "pending") {
+        patch.description = tx.description;
+        if (match.categorized_by === "none") Object.assign(patch, classify(tx, rules));
+      }
+      check(await db.from("transactions").update(patch).eq("id", match.id));
       continue;
     }
     fresh.push({ ...tx, ...classify(tx, rules) });
   }
 
-  // Reservationer som inte längre finns i banken har makulerats.
+  // Kommande dragningar som inte längre finns i banken har makulerats.
   const cancelled = existing.filter(
     (t) => t.status === "pending" && t.connection_id === conn.id && t.date >= dateFrom && !consumed.has(t.id) && !fetchedIds.has(t.external_id),
   );

@@ -106,6 +106,12 @@ export function missingAllocations({ settings, buckets, allocations, today }) {
   return out;
 }
 
+/** Tar bort rader från bankkonton som är avstängda. De kommer tillbaka om kontot slås på igen. */
+export function activeTransactions(transactions, connections = []) {
+  const off = new Set(connections.filter((c) => !c.enabled).map((c) => c.id));
+  return off.size ? transactions.filter((t) => !off.has(t.connection_id)) : transactions;
+}
+
 /**
  * Räknar ut saldot i alla hinkar.
  *

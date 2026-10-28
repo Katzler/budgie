@@ -72,7 +72,7 @@ create table public.transfers (
 -- Transaktioner ---------------------------------------------------------------
 -- amount: negativt = pengar ut. kind 'expense' hör till en hink (null = osorterad),
 -- kind 'income' påverkar Att fördela (lön, överföringar till sparkonto m.m.).
--- status: 'pending' = reserverad i banken, 'booked' = bokförd,
+-- status: 'pending' = kommande i banken, inte bokförd, 'booked' = bokförd,
 --         'manual' = inlagd för hand, 'quick' = från Apple Pay-genvägen.
 
 create table public.transactions (

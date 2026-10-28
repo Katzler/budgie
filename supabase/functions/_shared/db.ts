@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
-import { missingAllocations, todayInSweden } from "./budget.js";
+import { activeTransactions, missingAllocations, todayInSweden } from "./budget.js";
 import { HttpError } from "./http.ts";
 
 export type Db = SupabaseClient;
@@ -38,9 +38,10 @@ async function selectAll(db: Db, table: string) {
 
 /** Allt som behövs för att räkna saldon. Fyller också på hinkar som saknar månadens påfyllning. */
 export async function loadState(db: Db) {
-  const [settingsRows, buckets, allocations, transfers, transactions, rules, members] = await Promise.all(
-    ["settings", "buckets", "allocations", "transfers", "transactions", "rules", "members"].map((t) => selectAll(db, t)),
+  const [settingsRows, buckets, allocations, transfers, allTransactions, rules, members, connections] = await Promise.all(
+    ["settings", "buckets", "allocations", "transfers", "transactions", "rules", "members", "bank_connections"].map((t) => selectAll(db, t)),
   );
+  const transactions = activeTransactions(allTransactions, connections);
   const settings = settingsRows[0] ?? { period_start_day: 25, start_balance: 0, start_date: null };
   const today = todayInSweden();
   const missing = missingAllocations({ settings, buckets, allocations, today });

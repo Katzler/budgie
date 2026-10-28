@@ -1,6 +1,7 @@
 import { config } from "./config.js";
 import { createStore } from "./store.js";
 import {
+  activeTransactions,
   computeBudget,
   missingAllocations,
   todayInSweden,
@@ -86,6 +87,7 @@ const inBudget = (t) => !S.db.settings.start_date || t.date >= S.db.settings.sta
 
 async function reload() {
   S.db = await S.store.loadAll();
+  S.db.transactions = activeTransactions(S.db.transactions, S.db.bank_connections);
   S.db.transactions.sort((a, b) => b.date.localeCompare(a.date) || (b.created_at || "").localeCompare(a.created_at || ""));
   S.me = S.db.members.find((m) => m.user_id === S.session.user.id) ?? null;
   if (!S.me) return;
@@ -187,7 +189,7 @@ function txRow(t, { showBucket = true } = {}) {
   const b = t.bucket_id ? bucketById(t.bucket_id) : null;
   const where = t.kind === "income" ? "Att fördela" : b ? `${b.icon} ${b.name}` : '<span class="warn">Osorterad</span>';
   const badge =
-    t.status === "pending" ? '<span class="pill">Reserverad</span>' : t.status === "quick" ? '<span class="pill">Apple Pay</span>' : t.status === "manual" ? '<span class="pill">Manuell</span>' : "";
+    t.status === "pending" ? '<span class="pill">Kommande</span>' : t.status === "quick" ? '<span class="pill">Apple Pay</span>' : t.status === "manual" ? '<span class="pill">Manuell</span>' : "";
   return `<a class="row tx" href="#/tx/${t.id}">
     <div class="row-main">
       <div class="row-title">${esc(t.description)}</div>
@@ -340,7 +342,7 @@ function viewSort() {
          ${list
            .map(
              (t) => `<div class="card sort-item" data-tx="${t.id}">
-               <div class="sort-head"><div><div class="row-title">${esc(t.description)}</div><div class="row-sub">${relDate(t.date)}${t.status === "pending" ? " · Reserverad" : ""}</div></div>
+               <div class="sort-head"><div><div class="row-title">${esc(t.description)}</div><div class="row-sub">${relDate(t.date)}${t.status === "pending" ? " · Kommande" : ""}</div></div>
                <div class="row-amount">${kr(t.amount, { sign: true })}</div></div>
                ${bucketChips(null)}
              </div>`,
@@ -430,7 +432,7 @@ function viewBucket(id) {
 function viewTx(id) {
   const t = S.db.transactions.find((x) => x.id === id);
   if (!t) return viewHome();
-  const statusText = { pending: "Reserverad i banken", booked: "Bokförd", manual: "Inlagd för hand", quick: "Från Apple Pay-genvägen" }[t.status];
+  const statusText = { pending: "Kommande dragning, inte bokförd än", booked: "Bokförd", manual: "Inlagd för hand", quick: "Från Apple Pay-genvägen" }[t.status];
   page({
     title: "Köp",
     back: "#/",
