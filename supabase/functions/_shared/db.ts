@@ -1,4 +1,4 @@
-import { createClient, SupabaseClient } from "jsr:@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2.49.4";
 import { activeTransactions, missingAllocations, todayInSweden } from "./budget.js";
 import { HttpError } from "./http.ts";
 
