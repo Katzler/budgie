@@ -452,6 +452,7 @@ function viewTx(id) {
         <textarea name="note" rows="2" placeholder="T.ex. present till mamma">${esc(t.note)}</textarea>
         <button class="btn" type="submit">Spara anteckning</button>
       </form>
+      ${t.raw ? `<details class="card raw"><summary>Från banken</summary><pre>${esc(JSON.stringify(t.raw, null, 2))}</pre></details>` : ""}
       ${t.status === "manual" || t.status === "quick" ? `<button class="btn danger full" data-act="delete">Ta bort köpet</button>` : ""}`,
   });
   S.handlers = {

@@ -98,7 +98,7 @@ export async function toTransaction(raw: any, connectionId: string) {
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${date}|${amount}|${description}|${status}`));
     externalId = "h:" + [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
   }
-  return { external_id: `${connectionId}:${externalId}`, connection_id: connectionId, date, amount, description, counterparty, status };
+  return { external_id: `${connectionId}:${externalId}`, connection_id: connectionId, date, amount, description, counterparty, status, raw };
 }
 
 /** Saldot som bäst motsvarar "disponibelt belopp" i bankens app. */

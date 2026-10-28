@@ -80,8 +80,8 @@ async function syncConnection(db: Db, conn: any, settings: any, rules: any[], to
     const same = byExternal.get(tx.external_id);
     if (same) {
       consumed.add(same.id);
-      if (same.status !== tx.status || same.date !== tx.date) {
-        check(await db.from("transactions").update({ status: tx.status, date: tx.date }).eq("id", same.id));
+      if (same.status !== tx.status || same.date !== tx.date || !same.raw) {
+        check(await db.from("transactions").update({ status: tx.status, date: tx.date, raw: tx.raw }).eq("id", same.id));
       }
       continue;
     }
@@ -94,7 +94,7 @@ async function syncConnection(db: Db, conn: any, settings: any, rules: any[], to
       check(
         await db
           .from("transactions")
-          .update({ external_id: tx.external_id, connection_id: conn.id, status: tx.status, date: tx.date, counterparty: tx.counterparty })
+          .update({ external_id: tx.external_id, connection_id: conn.id, status: tx.status, date: tx.date, counterparty: tx.counterparty, raw: tx.raw })
           .eq("id", match.id),
       );
       continue;
