@@ -308,8 +308,6 @@ function viewHome() {
   };
 }
 
-// Varje hink är en ruta som fylls nerifrån: löpande hinkar efter hur mycket
-// av månadens pengar som är kvar, sparhinkar efter hur nära taket de är.
 function bucketTile(b) {
   const s = S.budget.buckets.get(b.id);
   const savings = b.kind === "savings";
@@ -321,10 +319,8 @@ function bucketTile(b) {
         : savings
           ? `+${krR(b.monthly_amount)}/mån`
           : `av ${krR(s.periodTotal)}`;
-  const level = s.balance < 0 ? "neg" : s.ratio < 0.2 && !savings ? "low" : savings ? "saving" : "";
-  const fill = s.balance < 0 ? 1 : savings && b.cap_amount ? Math.max(0, Math.min(1, s.balance / b.cap_amount)) : savings && s.balance > 0 ? 1 : s.ratio;
+  const level = s.balance < 0 ? "neg" : s.ratio < 0.2 && !savings ? "low" : "";
   return `<a class="tile ${level}" href="#/hink/${b.id}" aria-label="${esc(b.name)}, ${krR(s.balance)} kvar">
-    <span class="tile-fill" style="height:${Math.round(fill * 100)}%"></span>
     <span class="tile-head"><span class="tile-icon">${esc(b.icon)}</span><span class="tile-name">${esc(b.name)}</span></span>
     <span class="tile-amount">${krR(s.balance)}</span>
     <span class="tile-sub">${sub}</span>
