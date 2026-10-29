@@ -1,5 +1,5 @@
 // Hämtar transaktioner från banken, sorterar dem i hinkar och skickar notiser.
-import { formatKr, parseISODate, toISODate, todayInSweden } from "./budget.js";
+import { formatKr, parseISODate, toISODate, todayInSweden, visibleTo } from "./budget.js";
 import { classify, findMatchForBooked } from "./categorize.js";
 import { Db, check, loadState } from "./db.ts";
 import { eb, pickBalance, toTransaction } from "./enablebanking.ts";
@@ -150,7 +150,9 @@ async function notifyNew(db: Db, rows: any[], state: any) {
     }
     const bucket = state.buckets.find((b: any) => b.id === t.bucket_id);
     const where = bucket ? `${bucket.icon} ${bucket.name}` : "📥 Osorterat – tryck för att välja hink";
-    await sendPush(db, { title: t.description, body: `${amount} → ${where}`, url: `./#/tx/${t.id}`, tag: t.id });
+    // Köp i en privat hink syns bara för ägaren.
+    const userIds = bucket ? state.members.filter((m: any) => visibleTo(bucket, m.user_id)).map((m: any) => m.user_id) : undefined;
+    await sendPush(db, { title: t.description, body: `${amount} → ${where}`, url: `./#/tx/${t.id}`, tag: t.id }, { userIds });
   }
 }
 
@@ -162,14 +164,16 @@ async function notifyAllocated(db: Db, state: any) {
   if (total < MIN_ALLOCATED_NOTIFICATION) return;
   const kr = (ore: number) => formatKr(ore, { decimals: "never" });
   const base = state.allocated.filter((a: any) => a.source === "base").reduce((s: number, a: any) => s + a.amount, 0);
-  const overflow = state.allocated
-    .filter((a: any) => a.source === "overflow")
-    .map((a: any) => {
-      const b = state.buckets.find((x: any) => x.id === a.bucket_id);
-      return `${b?.icon ?? ""} ${b?.name ?? "?"} +${kr(a.amount)}`;
-    });
-  const parts = [base ? `${kr(base)} till månadens hinkar` : "", ...overflow].filter(Boolean);
-  await sendPush(db, { title: `💰 ${kr(total)} fördelat`, body: parts.join(" · "), url: "./", tag: "budgie-allocated" });
+  // Var och en får sin egen notis, utan överskottet till den andras privata hink.
+  for (const m of state.members) {
+    const overflow = state.allocated
+      .filter((a: any) => a.source === "overflow")
+      .map((a: any) => ({ a, b: state.buckets.find((x: any) => x.id === a.bucket_id) }))
+      .filter(({ b }: any) => !b || visibleTo(b, m.user_id))
+      .map(({ a, b }: any) => `${b?.icon ?? ""} ${b?.name ?? "?"} +${kr(a.amount)}`);
+    const parts = [base ? `${kr(base)} till månadens hinkar` : "", ...overflow].filter(Boolean);
+    await sendPush(db, { title: `💰 ${kr(total)} fördelat`, body: parts.join(" · "), url: "./", tag: "budgie-allocated" }, { userIds: [m.user_id] });
+  }
 }
 
 async function remindExpiring(db: Db, connections: any[], today: string) {

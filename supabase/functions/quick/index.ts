@@ -5,7 +5,7 @@
 // POST { token, action: "buckets" }          → { names: [...] }
 import { HttpError, handle, json } from "../_shared/http.ts";
 import { check, loadState, serviceClient } from "../_shared/db.ts";
-import { computeBudget, formatKr, parseAmountToOre, todayInSweden } from "../_shared/budget.js";
+import { computeBudget, formatKr, parseAmountToOre, todayInSweden, visibleTo } from "../_shared/budget.js";
 import { classify } from "../_shared/categorize.js";
 import { sendPush } from "../_shared/push.ts";
 
@@ -24,9 +24,11 @@ Deno.serve(
 
     const state = await loadState(db);
     const buckets = state.buckets.filter((b: any) => !b.archived);
+    // Den andras privata hink går inte att välja och visas inte.
+    const mine = buckets.filter((b: any) => visibleTo(b, saved.user_id));
 
     if (body.action === "buckets") {
-      return json({ names: buckets.sort((a: any, b: any) => a.sort_order - b.sort_order).map((b: any) => b.name) });
+      return json({ names: mine.sort((a: any, b: any) => a.sort_order - b.sort_order).map((b: any) => b.name) });
     }
 
     const amount = -Math.abs(parseAmountToOre(body.amount));
@@ -34,26 +36,30 @@ Deno.serve(
     const merchant = String(body.merchant || "Apple Pay").trim().slice(0, 200);
     const tx = { date: todayInSweden(), amount, description: merchant, status: "quick", created_by: saved.user_id };
 
-    const chosen = body.bucket ? buckets.find((b: any) => b.name.toLowerCase() === String(body.bucket).trim().toLowerCase()) : null;
+    const chosen = body.bucket ? mine.find((b: any) => b.name.toLowerCase() === String(body.bucket).trim().toLowerCase()) : null;
     const cls = chosen ? { kind: "expense", bucket_id: chosen.id, categorized_by: "quick" } : classify(tx, state.rules);
     const [row] = check(await db.from("transactions").insert({ ...tx, ...cls }).select()) as any[];
 
     state.transactions.push(row);
     const budget = computeBudget(state);
     const bucket = cls.bucket_id ? buckets.find((b: any) => b.id === cls.bucket_id) : null;
-    const remaining = bucket ? budget.buckets.get(bucket.id)?.balance ?? 0 : null;
+    const shown = bucket && visibleTo(bucket, saved.user_id);
+    const remaining = shown ? budget.buckets.get(bucket.id)?.balance ?? 0 : null;
     const kr = (ore: number) => formatKr(ore, { decimals: "never" });
-    const text = bucket
+    const text = shown
       ? `${bucket.icon} ${bucket.name}: ${kr(remaining!)} kvar`
-      : cls.kind === "income"
+      : bucket
+        ? `✓ ${formatKr(amount)} sorterat`
+        : cls.kind === "income"
         ? `💰 Att fördela: ${kr(budget.attFordela)}`
         : `📥 ${formatKr(amount)} osorterat – öppna Budgie och välj hink`;
 
     // Den andra i hushållet får en notis; den som betalade ser svaret i genvägen.
     const who = state.members.find((m: any) => m.user_id === saved.user_id)?.name ?? "";
     const where = bucket ? `${bucket.icon} ${bucket.name}` : cls.kind === "income" ? "💰 Att fördela" : "📥 Osorterat";
-    await sendPush(db, { title: `${who}: ${merchant}`, body: `${formatKr(amount)} → ${where}`, url: `./#/tx/${row.id}`, tag: row.id }, { excludeUserId: saved.user_id });
+    const others = state.members.filter((m: any) => m.user_id !== saved.user_id && (!bucket || visibleTo(bucket, m.user_id))).map((m: any) => m.user_id);
+    if (others.length) await sendPush(db, { title: `${who}: ${merchant}`, body: `${formatKr(amount)} → ${where}`, url: `./#/tx/${row.id}`, tag: row.id }, { userIds: others });
 
-    return json({ text, bucket: bucket?.name ?? null, remaining });
+    return json({ text, bucket: shown ? bucket.name : null, remaining });
   }),
 );

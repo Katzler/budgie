@@ -134,6 +134,8 @@ Lön och flyttar till och från sparkonton är *inkomster*: de påverkar Att fö
 
 **Kommande → bokfört:** dragningar som banken har registrerat men inte bokfört, t.ex. autogiro, syns som *Kommande* med bankens ofta förkortade text. När dragningen bokförs kopplas den ihop med den kommande raden (samma belopp och konto, inom ±5 dagar). Hinken följer med och texten byts mot den bokförda. Köp från Apple Pay-genvägen kopplas ihop på samma sätt men behåller sitt handlarnamn. Swedbank skickar inte kortreservationer, så kortköp dyker upp först när de bokförs.
 
+**Egna pengar:** en privat hink med ägare syns bara för ägaren. Den andra ser inte hinken, köpen i den, flyttarna till och från den eller reglerna som sorterar dit, och får inga notiser om den. Hinken räknas ändå med i Att fördela och kontrollsumman, och månadsbeloppet syns under Inställningar eftersom det är en del av den gemensamma planen. Att sortera ett köp till en privat hink sparar ingen regel, så att den andras köp i samma butik inte hamnar där. Det döljs i appen, inte i databasen, och kontot är gemensamt, så köpen syns fortfarande i Swedbanks app.
+
 **Avstängda konton:** rader från ett bankkonto som är avstängt under Inställningar → Bankkoppling räknas inte med och visas inte. Slås kontot på igen kommer de tillbaka.
 
 ## Filer

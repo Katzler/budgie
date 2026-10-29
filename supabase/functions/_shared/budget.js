@@ -70,6 +70,11 @@ export function priorityOrder(buckets) {
   return [...list.filter((b) => b.kind !== "personal"), ...list.filter((b) => b.kind === "personal")];
 }
 
+/** Privata hinkar syns bara för sin ägare. Gemensamma hinkar och privata utan ägare syns för alla. */
+export function visibleTo(bucket, userId) {
+  return bucket.kind !== "personal" || !bucket.owner_id || bucket.owner_id === userId;
+}
+
 /**
  * Så många dagar före nästa lönedag pausas fördelningen. En lön som kommer
  * tidigt, t.ex. före jul, ska fylla nästa månad och inte gå till överskottet.

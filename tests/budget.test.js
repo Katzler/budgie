@@ -7,6 +7,7 @@ import {
   activeTransactions,
   parseAmountToOre,
   formatKr,
+  visibleTo,
 } from "../supabase/functions/_shared/budget.js";
 import { classify, matchRule, suggestPattern, findMatchForBooked, defaultRulesFor } from "../supabase/functions/_shared/categorize.js";
 
@@ -254,6 +255,14 @@ test("kontrollsumman blir startsaldo + alla transaktioner", () => {
   eq(r.total, 2000000 + 3500000 - 45000 - 12000 - 500000);
   eq(r.uncategorized, -12000);
   eq(r.uncategorizedCount, 1);
+});
+
+test("privata hinkar syns bara för ägaren", () => {
+  const egna = { kind: "personal", owner_id: "jack" };
+  eq(visibleTo(egna, "jack"), true);
+  eq(visibleTo(egna, "julia"), false);
+  eq(visibleTo({ kind: "personal", owner_id: null }, "julia"), true, "utan ägare");
+  eq(visibleTo({ kind: "spending", owner_id: null }, "julia"), true, "gemensam");
 });
 
 // --- Belopp ------------------------------------------------------------

@@ -8,6 +8,7 @@ import {
   mergeAllocations,
   priorityOrder,
   todayInSweden,
+  visibleTo,
   formatKr,
   parseAmountToOre,
   periodFor,
@@ -16,7 +17,7 @@ import {
 import { matchRule, suggestPattern, defaultRulesFor } from "../supabase/functions/_shared/categorize.js";
 
 const app = document.getElementById("app");
-const S = { store: null, session: null, db: null, me: null, budget: null, handlers: {} };
+const S = { store: null, session: null, db: null, me: null, hidden: new Set(), budget: null, handlers: {} };
 
 // --- Hjälpfunktioner ----------------------------------------------------------
 
@@ -77,6 +78,11 @@ async function run(fn) {
 
 const activeBuckets = () =>
   S.db.buckets.filter((b) => !b.archived).sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, "sv"));
+/** Hinkarna jag ser: allt utom den andras privata hink. Den finns kvar i budgeten men syns inte. */
+const myBuckets = () => activeBuckets().filter((b) => visibleTo(b, S.me.user_id));
+const hiddenBucket = (id) => !!id && S.hidden.has(id);
+const seenTx = (t) => !hiddenBucket(t.bucket_id);
+const seenTransfer = (t) => !hiddenBucket(t.from_bucket) && !hiddenBucket(t.to_bucket);
 /** Hinkarna i samma ordning som på startsidan: gemensamma först, sedan privata. Det är också fördelningens ordning. */
 const orderedBuckets = () => priorityOrder(S.db.buckets);
 const bucketById = (id) => S.db.buckets.find((b) => b.id === id);
@@ -91,6 +97,7 @@ async function reload() {
   S.db.transactions.sort((a, b) => b.date.localeCompare(a.date) || (b.created_at || "").localeCompare(a.created_at || ""));
   S.me = S.db.members.find((m) => m.user_id === S.session.user.id) ?? null;
   if (!S.me) return;
+  S.hidden = new Set(S.db.buckets.filter((b) => !visibleTo(b, S.me.user_id)).map((b) => b.id));
   const auto = autoAllocate({ ...S.db, today: today() });
   if (auto.rows.length) {
     await S.store.upsert("allocations", auto.rows, "bucket_id,period_start,source");
@@ -177,7 +184,7 @@ function page({ title, back, action = "", body, tabs = true }) {
 
 function bucketChips(selectedId, { includeIncome = true, selectedIncome = false } = {}) {
   return `<div class="chips">
-    ${activeBuckets()
+    ${myBuckets()
       .map((b) => `<button type="button" class="chip${b.id === selectedId ? " selected" : ""}" data-act="pick" data-bucket="${b.id}">${esc(b.icon)} ${esc(b.name)}</button>`)
       .join("")}
     ${includeIncome ? `<button type="button" class="chip income${selectedIncome ? " selected" : ""}" data-act="pick" data-bucket="income">💰 Inkomst / Att fördela</button>` : ""}
@@ -203,7 +210,7 @@ function bucketOptions(selected, { includeAttFordela = false, includeIncome = fa
   return [
     includeAttFordela ? `<option value="" ${selected === "" ? "selected" : ""}>💰 Att fördela (${krR(S.budget.attFordela)})</option>` : "",
     includeIncome ? `<option value="income" ${selected === "income" ? "selected" : ""}>💰 Inkomst / Att fördela</option>` : "",
-    ...activeBuckets().map(
+    ...myBuckets().map(
       (b) => `<option value="${b.id}" ${selected === b.id ? "selected" : ""}>${esc(b.icon)} ${esc(b.name)} (${krR(B.get(b.id)?.balance ?? 0)})</option>`,
     ),
   ].join("");
@@ -252,7 +259,7 @@ function viewHome() {
   const daysLeft = daysBetween(today(), p.end) + 1;
   const group = (title, list, cols) =>
     list.length ? `<h2 class="section">${title}</h2><div class="tiles cols-${cols}">${list.map(bucketTile).join("")}</div>` : "";
-  const buckets = activeBuckets();
+  const buckets = myBuckets();
   const conns = S.db.bank_connections.filter((c) => c.enabled);
   const lastSync = conns.map((c) => c.last_sync_at).filter(Boolean).sort().pop();
   const bankBalance = conns.length && conns.every((c) => c.last_balance != null) ? conns.reduce((s, c) => s + c.last_balance, 0) : null;
@@ -330,7 +337,7 @@ function bucketTile(b) {
 let txLimit = 60;
 
 function viewTransactions() {
-  const all = S.db.transactions.filter(inBudget);
+  const all = S.db.transactions.filter((t) => inBudget(t) && seenTx(t));
   const unsorted = all.filter((t) => t.kind === "expense" && !t.bucket_id);
   const sorted = all.filter((t) => !(t.kind === "expense" && !t.bucket_id));
   const shown = sorted.slice(0, txLimit);
@@ -390,7 +397,9 @@ function viewTransactions() {
         } catch {}
         await S.store.update("transactions", { id: t.id }, patch);
         let extra = 0;
-        const pattern = suggestPattern(t.description);
+        // Ingen regel för privata hinkar: den andras köp i samma butik skulle annars försvinna in i min hink.
+        const personal = !income && bucketById(patch.bucket_id).kind === "personal";
+        const pattern = personal ? "" : suggestPattern(t.description);
         if (rememberOn && pattern) extra = await saveRuleAndApply({ pattern, ...patch }, t.id);
         const name = income ? "Att fördela" : bucketById(patch.bucket_id).name;
         toast(`${name}${rememberOn && pattern ? ` · kommer ihåg "${pattern}"` : ""}${extra ? ` (+${extra} till)` : ""}`);
@@ -401,7 +410,7 @@ function viewTransactions() {
 
 function viewBucket(id) {
   const b = bucketById(id);
-  if (!b) return viewHome();
+  if (!b || hiddenBucket(id)) return viewHome();
   const s = S.budget.buckets.get(id);
   const sd = S.db.settings.period_start_day;
   const txs = S.db.transactions.filter((t) => t.bucket_id === id && t.kind === "expense" && inBudget(t));
@@ -458,7 +467,7 @@ function viewBucket(id) {
 
 function viewTx(id) {
   const t = S.db.transactions.find((x) => x.id === id);
-  if (!t) return viewHome();
+  if (!t || !seenTx(t)) return viewHome();
   const statusText = { pending: "Kommande dragning, inte bokförd än", booked: "Bokförd", manual: "Inlagd för hand", quick: "Från Apple Pay-genvägen" }[t.status];
   page({
     title: "Köp",
@@ -514,9 +523,9 @@ function viewTx(id) {
 
 function viewTransfer() {
   const q = query();
-  const from = q.has("from") ? q.get("from") : activeBuckets()[0]?.id ?? "";
-  const to = q.has("to") ? q.get("to") : q.has("from") && q.get("from") === "" ? activeBuckets()[0]?.id ?? "" : "";
-  const recent = [...S.db.transfers].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 15);
+  const from = q.has("from") ? q.get("from") : myBuckets()[0]?.id ?? "";
+  const to = q.has("to") ? q.get("to") : q.has("from") && q.get("from") === "" ? myBuckets()[0]?.id ?? "" : "";
+  const recent = S.db.transfers.filter(seenTransfer).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 15);
   const name = (id) => (id ? `${bucketById(id)?.icon ?? ""} ${bucketById(id)?.name ?? "?"}` : "💰 Att fördela");
   page({
     title: "Flytta pengar",
@@ -592,7 +601,7 @@ function viewSettings() {
 
       <h2 class="section">Sortering och bank</h2>
       <div class="card list">
-        <a class="row" href="#/installningar/regler"><div class="row-main"><div class="row-title">Regler</div><div class="row-sub">${S.db.rules.length} regler för automatisk sortering</div></div>›</a>
+        <a class="row" href="#/installningar/regler"><div class="row-main"><div class="row-title">Regler</div><div class="row-sub">${S.db.rules.filter((r) => !hiddenBucket(r.bucket_id)).length} regler för automatisk sortering</div></div>›</a>
         <a class="row" href="#/installningar/bank"><div class="row-main"><div class="row-title">Bankkoppling</div><div class="row-sub">${conn ? `Swedbank · hämtat ${timeAgo(conn.last_sync_at)}` : "Inte kopplad"}</div></div>›</a>
         <a class="row" href="#/installningar/genvag"><div class="row-main"><div class="row-title">Apple Pay-genväg</div><div class="row-sub">Direkt besked när ni betalar med telefonen</div></div>›</a>
       </div>
@@ -668,7 +677,7 @@ function viewBucketEdit(id) {
   const balance = isNew ? 0 : S.budget.buckets.get(id).balance;
   page({
     title: isNew ? "Ny hink" : "Ändra hink",
-    back: isNew ? "#/installningar" : `#/hink/${id}`,
+    back: isNew || hiddenBucket(id) ? "#/installningar" : `#/hink/${id}`,
     body: `
       <form class="card form" data-submit="save">
         <div class="two-col">
@@ -693,7 +702,7 @@ function viewBucketEdit(id) {
         <p class="muted small">Taket är det mesta hinken får innehålla. Överskottet är det som blir kvar av lönen när alla hinkar fått sitt månadsbelopp.</p>
         <button class="btn primary" type="submit">Spara</button>
       </form>
-      ${isNew ? "" : `<button class="btn danger full" data-act="archive">Ta bort hinken</button><p class="muted small center">${balance ? `Saldot (${kr(balance)}) flyttas till Att fördela.` : ""} Gamla köp blir osorterade.</p>`}`,
+      ${isNew ? "" : `<button class="btn danger full" data-act="archive">Ta bort hinken</button><p class="muted small center">${balance && !hiddenBucket(id) ? `Saldot (${kr(balance)}) flyttas till Att fördela.` : ""} Gamla köp blir osorterade.</p>`}`,
   });
   S.handlers = {
     save: (f) =>
@@ -719,7 +728,7 @@ function viewBucketEdit(id) {
         } else {
           await S.store.update("buckets", { id }, row);
           toast("Sparat");
-          await reloadAndGo(`#/hink/${id}`);
+          await reloadAndGo(!visibleTo({ ...b, ...row }, S.me.user_id) ? "#/installningar" : `#/hink/${id}`);
         }
       }),
     archive: () =>
@@ -740,7 +749,7 @@ function viewBucketEdit(id) {
 }
 
 function viewRules() {
-  const rules = [...S.db.rules].sort((a, b) => a.pattern.localeCompare(b.pattern, "sv"));
+  const rules = S.db.rules.filter((r) => !hiddenBucket(r.bucket_id)).sort((a, b) => a.pattern.localeCompare(b.pattern, "sv"));
   const target = (r) => (r.kind === "income" ? "💰 Att fördela" : `${bucketById(r.bucket_id)?.icon ?? ""} ${bucketById(r.bucket_id)?.name ?? "?"}`);
   page({
     title: "Regler",
