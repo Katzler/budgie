@@ -178,14 +178,10 @@ main {
 .tiles.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .tiles.cols-2 > .tile:last-child:nth-child(odd) { grid-column: span 2; }
 .tile {
-  --meter: var(--pos);
   display: flex; flex-direction: column; min-height: 96px; padding: 10px 12px 12px;
   background: var(--card); clip-path: var(--notch); color: inherit;
 }
 .tile:active { transform: translateY(1px); }
-.tile.low { --meter: var(--low); }
-.tile.neg { --meter: var(--neg); }
-.tile.saving { --meter: var(--save); }
 .tile-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .tile-name { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tile-amount { margin-top: auto; padding-top: 8px; font-size: 19px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -195,16 +191,11 @@ main {
 .tile-sub.week.over, .tile-sub.week.over b { color: var(--low); }
 .tile.neg .tile-amount, .tile.neg .tile-sub, .tile.neg .tile-sub b { color: var(--neg); }
 .tile.low .tile-amount { color: var(--low); }
-.meter { display: flex; gap: 2px; margin-top: 8px; }
-.meter i { flex: 1; height: 4px; background: var(--bar-bg); }
-.meter i.on { background: var(--meter); }
 .cols-3 .tile { min-height: 90px; padding: 8px 9px 10px; }
 .cols-3 .tile-head { flex-direction: column; align-items: flex-start; gap: 4px; }
 .cols-3 .tile-name { max-width: 100%; font-size: 13px; }
 .cols-3 .tile-amount { font-size: 16px; }
 .cols-3 .tile-sub { font-size: 11px; }
-.cols-3 .meter { gap: 1px; }
-
 .hero { text-align: center; padding: 22px 16px 18px; }
 .hero .label { color: var(--muted); font-size: 14px; }
 .huge { font-size: 38px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; margin: 2px 0 4px; }

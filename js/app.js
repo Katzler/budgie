@@ -284,8 +284,8 @@ function viewHome() {
       }
       ${B.uncategorizedCount ? `<a class="card notice" href="#/transaktioner">${px("inbox", 2)}<span class="grow">${B.uncategorizedCount} köp att sortera (${krR(B.uncategorized)})</span>${icon("next", 2)}</a>` : ""}
       ${group("Löpande", buckets.filter((b) => b.kind === "spending"), 2)}
-      ${group("Sparande och räkningar", buckets.filter((b) => b.kind === "savings"), 3)}
       ${group("Egna", buckets.filter((b) => b.kind === "personal"), 2)}
+      ${group("Sparande och räkningar", buckets.filter((b) => b.kind === "savings"), 3)}
       <p class="footer-note muted small">
         ${
           diff == null
@@ -323,24 +323,17 @@ function bucketTile(b) {
       : spending
         ? s.weekLeft < 0
           ? `<b>${krR(-s.weekLeft)}</b> över denna vecka`
-          : `<b>${krR(s.weekLeft)}</b> att spendera denna vecka`
+          : `<b>${krR(s.weekLeft)}</b> denna vecka`
         : savings && b.cap_amount
           ? `av ${krR(b.cap_amount)}`
           : savings
             ? `+${krR(b.monthly_amount)}/mån`
             : `av ${krR(s.periodTotal)}`;
   const level = s.balance < 0 ? "neg" : spending ? "" : s.ratio < 0.2 && !savings ? "low" : savings ? "saving" : "";
-  // Mätaren visar hur mycket av månadens pengar som är kvar, för sparhinkar hur
-  // nära taket de är. Löpande hinkar visar veckans belopp i stället, och
-  // sparhinkar utan tak har ingen mätare.
-  const fill = spending ? null : s.balance < 0 ? 1 : savings ? (b.cap_amount ? Math.max(0, Math.min(1, s.balance / b.cap_amount)) : null) : s.ratio;
-  const on = fill == null ? 0 : fill > 0 ? Math.max(1, Math.round(fill * 10)) : 0;
-  const meter = fill == null ? "" : `<span class="meter">${"<i class=on></i>".repeat(on)}${"<i></i>".repeat(10 - on)}</span>`;
   return `<a class="tile ${level}" href="#/hink/${b.id}" aria-label="${esc(b.name)}, ${krR(s.balance)} kvar">
     <span class="tile-head"><span class="tile-icon">${bucketIcon(b.icon)}</span><span class="tile-name">${esc(b.name)}</span></span>
     <span class="tile-amount">${krR(s.balance)}</span>
     <span class="tile-sub${spending ? ` week${s.weekLeft < 0 ? " over" : ""}` : ""}">${sub}</span>
-    ${meter}
   </a>`;
 }
 
