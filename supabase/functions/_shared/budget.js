@@ -64,6 +64,22 @@ export function periodFor(dateStr, startDay) {
   return { key: `${y}-${String(m + 1).padStart(2, "0")}`, start, end };
 }
 
+/**
+ * Veckan (måndag–söndag) som ett datum tillhör, beskuren till lönemånaden.
+ * `days` är veckans dagar och `daysLeft` dagarna från veckans start till periodens slut.
+ * @param {string} dateStr
+ * @param {{ start: string, end: string }} period
+ */
+export function weekFor(dateStr, period) {
+  const weekday = (parseISODate(dateStr).getDay() + 6) % 7; // måndag = 0
+  const monday = addDays(dateStr, -weekday);
+  const sunday = addDays(monday, 6);
+  const start = monday < period.start ? period.start : monday;
+  const end = sunday > period.end ? period.end : sunday;
+  const daysFrom = (a, b) => Math.round((parseISODate(b) - parseISODate(a)) / 86400000) + 1;
+  return { start, end, days: daysFrom(start, end), daysLeft: daysFrom(start, period.end) };
+}
+
 /** Aktiva hinkar i prioritetsordning, samma som på startsidan: gemensamma först, sedan privata. */
 export function priorityOrder(buckets) {
   const list = buckets.filter((b) => !b.archived).sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, "sv"));
@@ -179,6 +195,7 @@ export function activeTransactions(transactions, connections = []) {
 export function computeBudget({ settings, buckets, allocations, transfers, transactions, today }) {
   const startDay = settings.period_start_day;
   const period = periodFor(today, startDay);
+  const week = weekFor(today, period);
   const startDate = settings.start_date;
 
   /** @type {Map<string, any>} */
@@ -193,9 +210,11 @@ export function computeBudget({ settings, buckets, allocations, transfers, trans
       transferPeriod: 0,
       spent: 0,
       spentPeriod: 0,
+      spentWeek: 0,
       balance: 0,
       periodTotal: 0,
       ratio: 0,
+      weekLeft: 0,
     });
   }
 
@@ -244,6 +263,7 @@ export function computeBudget({ settings, buckets, allocations, transfers, trans
     }
     s.spent += t.amount;
     if (t.date >= period.start) s.spentPeriod += t.amount;
+    if (t.date >= week.start) s.spentWeek += t.amount;
   }
 
   let bucketSum = 0;
@@ -252,11 +272,17 @@ export function computeBudget({ settings, buckets, allocations, transfers, trans
     // Det som fanns att använda den här perioden = saldot + det som redan gjorts av med.
     s.periodTotal = s.balance - s.spentPeriod;
     s.ratio = s.periodTotal > 0 ? Math.max(0, Math.min(1, s.balance / s.periodTotal)) : 0;
+    // Veckans del av det som fanns när veckan började, jämnt fördelat på periodens
+    // återstående dagar, minus det som redan gjorts av med i veckan. Flyttar in
+    // under veckan höjer veckans belopp. Sista veckan är det hela saldot.
+    const weekStartBalance = Math.max(0, s.balance - s.spentWeek);
+    s.weekLeft = Math.round((weekStartBalance * week.days) / week.daysLeft / 100) * 100 + s.spentWeek;
     bucketSum += s.balance;
   }
 
   return {
     period,
+    week,
     buckets: byId,
     attFordela,
     uncategorized,

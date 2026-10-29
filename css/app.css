@@ -190,7 +190,10 @@ main {
 .tile-name { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tile-amount { margin-top: auto; padding-top: 8px; font-size: 19px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tile-sub { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
-.tile.neg .tile-amount, .tile.neg .tile-sub { color: var(--neg); }
+.tile-sub.week { white-space: normal; line-height: 1.35; }
+.tile-sub.week b { color: var(--text); font-weight: 600; }
+.tile-sub.week.over, .tile-sub.week.over b { color: var(--low); }
+.tile.neg .tile-amount, .tile.neg .tile-sub, .tile.neg .tile-sub b { color: var(--neg); }
 .tile.low .tile-amount { color: var(--low); }
 .meter { display: flex; gap: 2px; margin-top: 8px; }
 .meter i { flex: 1; height: 4px; background: var(--bar-bg); }

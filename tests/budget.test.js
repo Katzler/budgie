@@ -4,6 +4,7 @@ import {
   autoAllocate,
   mergeAllocations,
   computeBudget,
+  weekFor,
   activeTransactions,
   parseAmountToOre,
   formatKr,
@@ -200,6 +201,45 @@ test("överdrag dras av nästa månad", () => {
   eq(b.balance, 50000, "saldo");
   eq(b.spentPeriod, -20000);
   eq(b.periodTotal, 70000, "tillgängligt i perioden = 1000 − 300 i överdrag");
+});
+
+test("veckan beskärs till lönemånaden", () => {
+  const p = periodFor("2026-10-29", 25); // 23 okt – 24 nov
+  eq(weekFor("2026-10-29", p), { start: "2026-10-26", end: "2026-11-01", days: 7, daysLeft: 30 });
+  eq(weekFor("2026-10-23", p), { start: "2026-10-23", end: "2026-10-25", days: 3, daysLeft: 33 });
+  eq(weekFor("2026-11-24", p), { start: "2026-11-23", end: "2026-11-24", days: 2, daysLeft: 2 });
+});
+
+test("veckans belopp är saldot vid veckans start delat på återstående dagar", () => {
+  // Mån 30 nov, perioden slutar 24 dec: 25 dagar kvar, varav 7 i veckan.
+  const s = state({
+    allocations: [{ bucket_id: "mat", period_start: "2026-11-25", amount: 500000 }],
+    transactions: [
+      { date: "2026-11-26", amount: -100000, kind: "expense", bucket_id: "mat" },
+      { date: "2026-11-30", amount: -20000, kind: "expense", bucket_id: "mat" },
+    ],
+  });
+  const b = computeBudget(s).buckets.get("mat");
+  eq(b.spentWeek, -20000);
+  eq(b.weekLeft, 112000 - 20000, "4000 kr × 7/25 = 1120 kr, minus 200 kr");
+});
+
+test("sista veckan får man spendera hela saldot", () => {
+  const s = state({
+    today: "2026-12-23",
+    allocations: [{ bucket_id: "mat", period_start: "2026-11-25", amount: 500000 }],
+    transactions: [{ date: "2026-12-22", amount: -30000, kind: "expense", bucket_id: "mat" }],
+  });
+  const b = computeBudget(s).buckets.get("mat");
+  eq(b.weekLeft, b.balance);
+});
+
+test("köper man för mycket blir veckans belopp negativt", () => {
+  const s = state({
+    allocations: [{ bucket_id: "mat", period_start: "2026-11-25", amount: 500000 }],
+    transactions: [{ date: "2026-11-30", amount: -200000, kind: "expense", bucket_id: "mat" }],
+  });
+  eq(computeBudget(s).buckets.get("mat").weekLeft, 140000 - 200000);
 });
 
 test("återbetalning ökar hinkens saldo", () => {

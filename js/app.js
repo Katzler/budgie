@@ -267,7 +267,7 @@ function viewHome() {
     body: `
       <p class="period muted">${shortDate(p.start)} – ${shortDate(p.end)} · ${daysLeft} ${daysLeft === 1 ? "dag" : "dagar"} kvar</p>
       ${
-        B.attFordela !== 0
+        Math.abs(B.attFordela) >= 50 // visas avrundat, så ören som blir "0 kr" döljs
           ? `<a class="card att-fordela ${B.attFordela < 0 ? "neg" : ""}" href="#/flytta?from=">
               ${px("coin", 3, "px art")}
               <div class="grow"><div class="label">Att fördela</div>
@@ -316,24 +316,30 @@ function viewHome() {
 function bucketTile(b) {
   const s = S.budget.buckets.get(b.id);
   const savings = b.kind === "savings";
+  const spending = b.kind === "spending";
   const sub =
     s.balance < 0
       ? `Över med ${krR(-s.balance)}`
-      : savings && b.cap_amount
-        ? `av ${krR(b.cap_amount)}`
-        : savings
-          ? `+${krR(b.monthly_amount)}/mån`
-          : `av ${krR(s.periodTotal)}`;
-  const level = s.balance < 0 ? "neg" : s.ratio < 0.2 && !savings ? "low" : savings ? "saving" : "";
+      : spending
+        ? s.weekLeft < 0
+          ? `<b>${krR(-s.weekLeft)}</b> över denna vecka`
+          : `<b>${krR(s.weekLeft)}</b> att spendera denna vecka`
+        : savings && b.cap_amount
+          ? `av ${krR(b.cap_amount)}`
+          : savings
+            ? `+${krR(b.monthly_amount)}/mån`
+            : `av ${krR(s.periodTotal)}`;
+  const level = s.balance < 0 ? "neg" : spending ? "" : s.ratio < 0.2 && !savings ? "low" : savings ? "saving" : "";
   // Mätaren visar hur mycket av månadens pengar som är kvar, för sparhinkar hur
-  // nära taket de är. Sparhinkar utan tak har ingen mätare.
-  const fill = s.balance < 0 ? 1 : savings ? (b.cap_amount ? Math.max(0, Math.min(1, s.balance / b.cap_amount)) : null) : s.ratio;
+  // nära taket de är. Löpande hinkar visar veckans belopp i stället, och
+  // sparhinkar utan tak har ingen mätare.
+  const fill = spending ? null : s.balance < 0 ? 1 : savings ? (b.cap_amount ? Math.max(0, Math.min(1, s.balance / b.cap_amount)) : null) : s.ratio;
   const on = fill == null ? 0 : fill > 0 ? Math.max(1, Math.round(fill * 10)) : 0;
   const meter = fill == null ? "" : `<span class="meter">${"<i class=on></i>".repeat(on)}${"<i></i>".repeat(10 - on)}</span>`;
   return `<a class="tile ${level}" href="#/hink/${b.id}" aria-label="${esc(b.name)}, ${krR(s.balance)} kvar">
     <span class="tile-head"><span class="tile-icon">${bucketIcon(b.icon)}</span><span class="tile-name">${esc(b.name)}</span></span>
     <span class="tile-amount">${krR(s.balance)}</span>
-    <span class="tile-sub">${sub}</span>
+    <span class="tile-sub${spending ? ` week${s.weekLeft < 0 ? " over" : ""}` : ""}">${sub}</span>
     ${meter}
   </a>`;
 }
