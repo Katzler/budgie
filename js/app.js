@@ -2,8 +2,11 @@ import { config } from "./config.js";
 import { createStore } from "./store.js";
 import {
   activeTransactions,
+  autoAllocate,
   computeBudget,
-  missingAllocations,
+  HOLD_DAYS,
+  mergeAllocations,
+  priorityOrder,
   todayInSweden,
   formatKr,
   parseAmountToOre,
@@ -74,11 +77,8 @@ async function run(fn) {
 
 const activeBuckets = () =>
   S.db.buckets.filter((b) => !b.archived).sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, "sv"));
-/** Hinkarna i samma ordning som på startsidan: gemensamma först, sedan privata. */
-const orderedBuckets = () => {
-  const list = activeBuckets();
-  return [...list.filter((b) => b.kind !== "personal"), ...list.filter((b) => b.kind === "personal")];
-};
+/** Hinkarna i samma ordning som på startsidan: gemensamma först, sedan privata. Det är också fördelningens ordning. */
+const orderedBuckets = () => priorityOrder(S.db.buckets);
 const bucketById = (id) => S.db.buckets.find((b) => b.id === id);
 const memberName = (id) => S.db.members.find((m) => m.user_id === id)?.name ?? "";
 const inBudget = (t) => !S.db.settings.start_date || t.date >= S.db.settings.start_date;
@@ -91,11 +91,14 @@ async function reload() {
   S.db.transactions.sort((a, b) => b.date.localeCompare(a.date) || (b.created_at || "").localeCompare(a.created_at || ""));
   S.me = S.db.members.find((m) => m.user_id === S.session.user.id) ?? null;
   if (!S.me) return;
-  const missing = missingAllocations({ ...S.db, today: today() });
-  if (missing.length) {
-    await S.store.insertIgnoreDuplicates("allocations", missing, "bucket_id,period_start");
-    S.db.allocations.push(...missing);
+  const auto = autoAllocate({ ...S.db, today: today() });
+  if (auto.rows.length) {
+    await S.store.upsert("allocations", auto.rows, "bucket_id,period_start,source");
+    mergeAllocations(S.db.allocations, auto.rows);
+    const total = auto.added.reduce((s, a) => s + a.amount, 0);
+    if (total >= 100) toast(`💰 ${formatKr(total, { decimals: "never" })} fördelat till hinkarna`);
   }
+  S.waitUntil = auto.waitUntil;
   S.budget = computeBudget({ ...S.db, today: today() });
 }
 
@@ -265,7 +268,13 @@ function viewHome() {
         B.attFordela !== 0
           ? `<a class="card att-fordela ${B.attFordela < 0 ? "neg" : ""}" href="#/flytta?from=">
               <div><div class="label">Att fördela</div>
-              <div class="muted small">${B.attFordela < 0 ? "Ni har fördelat mer än ni har" : "Pengar som inte ligger i någon hink"}</div></div>
+              <div class="muted small">${
+                B.attFordela < 0
+                  ? "Ni har fördelat mer än ni har"
+                  : S.waitUntil
+                    ? `Fördelas automatiskt ${shortDate(S.waitUntil)}`
+                    : "Alla hinkar är fulla"
+              }</div></div>
               <div class="big">${krR(B.attFordela)}</div>
             </a>`
           : ""
@@ -306,17 +315,20 @@ function bucketRow(b) {
   const sub =
     s.balance < 0
       ? `Över med ${krR(-s.balance)}`
-      : b.kind === "savings"
-        ? `Sparhink · +${krR(b.monthly_amount)}/mån`
-        : `${krR(Math.max(0, spent))} av ${krR(s.periodTotal)} använt`;
+      : b.kind === "savings" && b.cap_amount
+        ? `Mål ${krR(b.cap_amount)} · ${Math.min(100, Math.floor((s.balance / b.cap_amount) * 100))} %`
+        : b.kind === "savings"
+          ? `Sparhink · +${krR(b.monthly_amount)}/mån`
+          : `${krR(Math.max(0, spent))} av ${krR(s.periodTotal)} använt`;
   const owner = b.kind === "personal" && b.owner_id ? ` <span class="muted small">${esc(memberName(b.owner_id))}</span>` : "";
   const level = s.balance < 0 ? "neg" : s.ratio < 0.2 && b.kind !== "savings" ? "low" : "";
+  const fill = b.kind === "savings" && b.cap_amount ? Math.max(0, Math.min(1, s.balance / b.cap_amount)) : b.kind === "savings" && s.balance > 0 ? 1 : s.ratio;
   return `<a class="row bucket ${level}" href="#/hink/${b.id}">
     <div class="bucket-icon">${esc(b.icon)}</div>
     <div class="row-main">
       <div class="row-title">${esc(b.name)}${owner}</div>
       <div class="row-sub">${sub}</div>
-      <div class="bar"><span style="width:${Math.round((b.kind === "savings" && s.balance > 0 ? 1 : s.ratio) * 100)}%"></span></div>
+      <div class="bar"><span style="width:${Math.round(fill * 100)}%"></span></div>
     </div>
     <div class="row-amount big">${krR(s.balance)}</div>
   </a>`;
@@ -573,7 +585,7 @@ function viewSettings() {
         ${ordered
           .map(
             (b, i) => `<div class="row sortable">
-              <a class="row-link" href="#/installningar/hink/${b.id}"><div class="bucket-icon">${esc(b.icon)}</div><div class="row-main"><div class="row-title">${esc(b.name)}</div><div class="row-sub">${{ spending: "Löpande", savings: "Sparhink", personal: `Privat · ${esc(memberName(b.owner_id))}` }[b.kind]}</div></div><div class="row-amount">${kr(b.monthly_amount)}</div></a>
+              <a class="row-link" href="#/installningar/hink/${b.id}"><div class="bucket-icon">${esc(b.icon)}</div><div class="row-main"><div class="row-title">${esc(b.name)}</div><div class="row-sub">${[{ spending: "Löpande", savings: "Sparhink", personal: `Privat · ${esc(memberName(b.owner_id))}` }[b.kind], b.cap_amount != null ? `tak ${krR(b.cap_amount)}` : "", b.overflow_rank ? `överskott ${b.overflow_rank}` : ""].filter(Boolean).join(" · ")}</div></div><div class="row-amount">${kr(b.monthly_amount)}</div></a>
               <div class="move">
                 <button class="icon-btn small" data-act="move" data-id="${b.id}" data-dir="-1" aria-label="Flytta upp" ${sameGroup(b, ordered[i - 1]) ? "" : "disabled"}>${icon("up")}</button>
                 <button class="icon-btn small" data-act="move" data-id="${b.id}" data-dir="1" aria-label="Flytta ner" ${sameGroup(b, ordered[i + 1]) ? "" : "disabled"}>${icon("down")}</button>
@@ -583,6 +595,7 @@ function viewSettings() {
           .join("")}
         <a class="row add" href="#/installningar/hink/ny">＋ Ny hink</a>
       </div>
+      <p class="muted small">När lönen kommer fylls hinkarna med sitt månadsbelopp i den här ordningen, aldrig över taket. Det som blir över går till hinkarna med överskott 1, sedan 2 och så vidare; samma nummer delar lika. De sista ${HOLD_DAYS} dagarna före lönedagen väntar fördelningen till nästa månad.</p>
 
       <h2 class="section">Sortering och bank</h2>
       <div class="card list">
@@ -657,7 +670,7 @@ function viewSettings() {
 
 function viewBucketEdit(id) {
   const isNew = id === "ny";
-  const b = isNew ? { name: "", icon: "🪣", kind: "spending", owner_id: null, monthly_amount: 0, sort_order: Math.max(-1, ...S.db.buckets.map((x) => x.sort_order)) + 1 } : bucketById(id);
+  const b = isNew ? { name: "", icon: "🪣", kind: "spending", owner_id: null, monthly_amount: 0, cap_amount: null, overflow_rank: null, sort_order: Math.max(-1, ...S.db.buckets.map((x) => x.sort_order)) + 1 } : bucketById(id);
   if (!b) return viewSettings();
   const balance = isNew ? 0 : S.budget.buckets.get(id).balance;
   page({
@@ -679,7 +692,12 @@ function viewBucketEdit(id) {
           ${S.db.members.map((m) => `<option value="${m.user_id}" ${b.owner_id === m.user_id ? "selected" : ""}>${esc(m.name)}</option>`).join("")}
         </select></label>
         <label>Månadsbelopp (kr)<input name="monthly" inputmode="decimal" value="${b.monthly_amount / 100}"></label>
-        ${isNew ? "" : `<label class="toggle"><input type="checkbox" name="thisMonth"> Ändra även den här månadens påfyllning</label>`}
+        <label>Tak (kr, tomt = inget tak)<input name="cap" inputmode="decimal" value="${b.cap_amount == null ? "" : b.cap_amount / 100}"></label>
+        <label>Överskott<select name="overflow">
+          <option value="">Nej</option>
+          ${[1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${b.overflow_rank === n ? "selected" : ""}>${n}${n === 1 ? " – fylls först" : ""}</option>`).join("")}
+        </select></label>
+        <p class="muted small">Taket är det mesta hinken får innehålla. Överskottet är det som blir kvar av lönen när alla hinkar fått sitt månadsbelopp.</p>
         <button class="btn primary" type="submit">Spara</button>
       </form>
       ${isNew ? "" : `<button class="btn danger full" data-act="archive">Ta bort hinken</button><p class="muted small center">${balance ? `Saldot (${kr(balance)}) flyttas till Att fördela.` : ""} Gamla köp blir osorterade.</p>`}`,
@@ -689,12 +707,17 @@ function viewBucketEdit(id) {
       run(async () => {
         const monthly = parseAmountToOre(f.get("monthly") || "0");
         if (Number.isNaN(monthly) || monthly < 0) throw new Error("Ogiltigt belopp");
+        const capInput = String(f.get("cap") || "").trim();
+        const cap = capInput ? parseAmountToOre(capInput) : null;
+        if (cap != null && (Number.isNaN(cap) || cap < 0)) throw new Error("Ogiltigt tak");
         const row = {
           name: f.get("name").trim(),
           icon: f.get("icon").trim() || "🪣",
           kind: f.get("kind"),
           owner_id: f.get("kind") === "personal" ? f.get("owner") || null : null,
           monthly_amount: monthly,
+          cap_amount: cap,
+          overflow_rank: f.get("overflow") ? Number(f.get("overflow")) : null,
         };
         if (isNew) {
           const [created] = await S.store.insert("buckets", [{ ...row, sort_order: b.sort_order }]);
@@ -702,9 +725,6 @@ function viewBucketEdit(id) {
           await reloadAndGo(`#/hink/${created.id}`);
         } else {
           await S.store.update("buckets", { id }, row);
-          if (f.get("thisMonth")) {
-            await S.store.update("allocations", { bucket_id: id, period_start: S.budget.period.start }, { amount: monthly });
-          }
           toast("Sparat");
           await reloadAndGo(`#/hink/${id}`);
         }

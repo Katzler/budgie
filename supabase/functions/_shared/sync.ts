@@ -1,5 +1,5 @@
 // Hämtar transaktioner från banken, sorterar dem i hinkar och skickar notiser.
-import { computeBudget, formatKr, parseISODate, toISODate, todayInSweden } from "./budget.js";
+import { formatKr, parseISODate, toISODate, todayInSweden } from "./budget.js";
 import { classify, findMatchForBooked } from "./categorize.js";
 import { Db, check, loadState } from "./db.ts";
 import { eb, pickBalance, toTransaction } from "./enablebanking.ts";
@@ -38,7 +38,10 @@ export async function syncAll(db: Db, { psu, reminders = false }: { psu?: Psu; r
     }
   }
 
-  if (inserted.length) await notifyNew(db, inserted);
+  // Fördelar det som kommit in, även när ingen har öppnat appen.
+  const state = await loadState(db);
+  if (inserted.length) await notifyNew(db, inserted, state);
+  if (state.allocated.length) await notifyAllocated(db, state);
   if (reminders) await remindExpiring(db, connections, today);
 
   if (errors.length && !inserted.length) throw new Error(errors[0]);
@@ -121,17 +124,13 @@ async function syncConnection(db: Db, conn: any, settings: any, rules: any[], to
   check(
     await db
       .from("bank_connections")
-      .update({ last_sync_at: new Date().toISOString(), last_error: null, last_balance: pickBalance(balances ?? []), last_balance_at: new Date().toISOString() })
+      .update({ last_sync_at: new Date().toISOString(), last_error: null, last_balance: pickBalance(balances ?? []), last_balances: balances ?? [], last_balance_at: new Date().toISOString() })
       .eq("id", conn.id),
   );
   return rows;
 }
 
-async function notifyNew(db: Db, rows: any[]) {
-  const state = await loadState(db);
-  const budget = computeBudget(state);
-  const kr = (ore: number) => formatKr(ore, { decimals: "never" });
-
+async function notifyNew(db: Db, rows: any[], state: any) {
   if (rows.length > MAX_SINGLE_NOTIFICATIONS) {
     const unsorted = rows.filter((t) => t.kind === "expense" && !t.bucket_id).length;
     await sendPush(db, {
@@ -146,15 +145,31 @@ async function notifyNew(db: Db, rows: any[]) {
   for (const t of rows) {
     const amount = formatKr(t.amount, { sign: true });
     if (t.kind === "income") {
-      await sendPush(db, { title: `${t.description} ${amount}`, body: `💰 Att fördela: ${kr(budget.attFordela)}`, url: `./#/tx/${t.id}`, tag: t.id });
+      await sendPush(db, { title: t.description, body: `${amount} → 💰 Att fördela`, url: `./#/tx/${t.id}`, tag: t.id });
       continue;
     }
     const bucket = state.buckets.find((b: any) => b.id === t.bucket_id);
-    const body = bucket
-      ? `${bucket.icon} ${bucket.name}: ${kr(budget.buckets.get(bucket.id)?.balance ?? 0)} kvar`
-      : "📥 Osorterat – tryck för att välja hink";
-    await sendPush(db, { title: `${t.description} ${amount}`, body, url: `./#/tx/${t.id}`, tag: t.id });
+    const where = bucket ? `${bucket.icon} ${bucket.name}` : "📥 Osorterat – tryck för att välja hink";
+    await sendPush(db, { title: t.description, body: `${amount} → ${where}`, url: `./#/tx/${t.id}`, tag: t.id });
   }
+}
+
+/** Mindre belopp än så här (t.ex. en återbetalning) fördelas utan notis. */
+const MIN_ALLOCATED_NOTIFICATION = 100000;
+
+async function notifyAllocated(db: Db, state: any) {
+  const total = state.allocated.reduce((s: number, a: any) => s + a.amount, 0);
+  if (total < MIN_ALLOCATED_NOTIFICATION) return;
+  const kr = (ore: number) => formatKr(ore, { decimals: "never" });
+  const base = state.allocated.filter((a: any) => a.source === "base").reduce((s: number, a: any) => s + a.amount, 0);
+  const overflow = state.allocated
+    .filter((a: any) => a.source === "overflow")
+    .map((a: any) => {
+      const b = state.buckets.find((x: any) => x.id === a.bucket_id);
+      return `${b?.icon ?? ""} ${b?.name ?? "?"} +${kr(a.amount)}`;
+    });
+  const parts = [base ? `${kr(base)} till månadens hinkar` : "", ...overflow].filter(Boolean);
+  await sendPush(db, { title: `💰 ${kr(total)} fördelat`, body: parts.join(" · "), url: "./", tag: "budgie-allocated" });
 }
 
 async function remindExpiring(db: Db, connections: any[], today: string) {

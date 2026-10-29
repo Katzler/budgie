@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2.49.4";
-import { activeTransactions, missingAllocations, todayInSweden } from "./budget.js";
+import { activeTransactions, autoAllocate, mergeAllocations, todayInSweden } from "./budget.js";
 import { HttpError } from "./http.ts";
 
 export type Db = SupabaseClient;
@@ -36,7 +36,10 @@ async function selectAll(db: Db, table: string) {
   }
 }
 
-/** Allt som behövs för att räkna saldon. Fyller också på hinkar som saknar månadens påfyllning. */
+/**
+ * Allt som behövs för att räkna saldon. Fördelar också Att fördela till hinkarna;
+ * `allocated` är det som fördelades nu.
+ */
 export async function loadState(db: Db) {
   const [settingsRows, buckets, allocations, transfers, allTransactions, rules, members, connections] = await Promise.all(
     ["settings", "buckets", "allocations", "transfers", "transactions", "rules", "members", "bank_connections"].map((t) => selectAll(db, t)),
@@ -44,10 +47,10 @@ export async function loadState(db: Db) {
   const transactions = activeTransactions(allTransactions, connections);
   const settings = settingsRows[0] ?? { period_start_day: 25, start_balance: 0, start_date: null };
   const today = todayInSweden();
-  const missing = missingAllocations({ settings, buckets, allocations, today });
-  if (missing.length) {
-    check(await db.from("allocations").upsert(missing, { onConflict: "bucket_id,period_start", ignoreDuplicates: true }));
-    allocations.push(...missing);
+  const auto = autoAllocate({ settings, buckets, allocations, transfers, transactions, today });
+  if (auto.rows.length) {
+    check(await db.from("allocations").upsert(auto.rows, { onConflict: "bucket_id,period_start,source" }));
+    mergeAllocations(allocations, auto.rows);
   }
-  return { settings, buckets, allocations, transfers, transactions, rules, members, today };
+  return { settings, buckets, allocations, transfers, transactions, rules, members, today, allocated: auto.added };
 }

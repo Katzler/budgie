@@ -70,9 +70,9 @@ async function createSupabaseStore() {
     async insert(table, rows) {
       return check(await sb.from(table).insert(rows).select());
     },
-    async insertIgnoreDuplicates(table, rows, onConflict) {
+    async upsert(table, rows, onConflict) {
       if (!rows.length) return;
-      check(await sb.from(table).upsert(rows, { onConflict, ignoreDuplicates: true }));
+      check(await sb.from(table).upsert(rows, { onConflict }));
     },
     async update(table, match, patch) {
       check(await sb.from(table).update(patch).match(match));
@@ -101,7 +101,7 @@ async function createSupabaseStore() {
 
 // --- Demoläge ---------------------------------------------------------------
 
-const DEMO_KEY = "budgie-demo-v1";
+const DEMO_KEY = "budgie-demo-v2";
 
 function createDemoStore() {
   let db;
@@ -146,11 +146,13 @@ function createDemoStore() {
       save();
       return structuredClone(list);
     },
-    async insertIgnoreDuplicates(table, rows, onConflict) {
+    async upsert(table, rows, onConflict) {
       const keys = onConflict.split(",");
-      const existing = new Set(tableRows(table).map((r) => keys.map((k) => r[k]).join("|")));
-      const fresh = rows.filter((r) => !existing.has(keys.map((k) => r[k]).join("|")));
-      tableRows(table).push(...fresh.map((r) => withDefaults(table, r)));
+      for (const r of rows) {
+        const same = tableRows(table).find((row) => keys.every((k) => row[k] === r[k]));
+        if (same) Object.assign(same, r);
+        else tableRows(table).push(withDefaults(table, r));
+      }
       save();
     },
     async update(table, match, patch) {

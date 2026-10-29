@@ -41,6 +41,8 @@ export function demoSeed() {
     kind,
     owner_id,
     monthly_amount,
+    cap_amount: name === "Buffert" ? 10000000 : null,
+    overflow_rank: name === "Buffert" ? 1 : null,
     sort_order: i,
     archived: false,
     created_at: `${previousStart}T08:00:00.000Z`,
@@ -49,7 +51,7 @@ export function demoSeed() {
 
   const allocations = [];
   for (const start of [previousStart, current.start]) {
-    for (const b of buckets) allocations.push({ id: id("a"), bucket_id: b.id, period_start: start, amount: b.monthly_amount });
+    for (const b of buckets) allocations.push({ id: id("a"), bucket_id: b.id, period_start: start, source: "base", amount: b.monthly_amount });
   }
 
   const tx = (date, amount, description, bucket, extra = {}) => ({

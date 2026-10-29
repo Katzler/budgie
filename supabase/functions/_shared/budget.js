@@ -64,46 +64,91 @@ export function periodFor(dateStr, startDay) {
   return { key: `${y}-${String(m + 1).padStart(2, "0")}`, start, end };
 }
 
+/** Aktiva hinkar i prioritetsordning, samma som på startsidan: gemensamma först, sedan privata. */
+export function priorityOrder(buckets) {
+  const list = buckets.filter((b) => !b.archived).sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, "sv"));
+  return [...list.filter((b) => b.kind !== "personal"), ...list.filter((b) => b.kind === "personal")];
+}
+
 /**
- * Alla lönemånadsstarter från och med startdatumet till och med idag.
- * Det är de perioder som hinkarna ska fyllas på för.
+ * Så många dagar före nästa lönedag pausas fördelningen. En lön som kommer
+ * tidigt, t.ex. före jul, ska fylla nästa månad och inte gå till överskottet.
  */
-export function periodStartsBetween(startDate, today, startDay) {
-  const out = [];
-  if (!startDate || startDate > today) return out;
-  let { key } = periodFor(startDate, startDay);
-  const lastKey = periodFor(today, startDay).key;
-  for (;;) {
-    const [y, m] = key.split("-").map(Number);
-    const start = periodStartOf(y, m - 1, startDay);
-    if (start >= startDate && start <= today) out.push(start);
-    if (key === lastKey) break;
-    const next = new Date(y, m, 1);
-    key = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`;
+export const HOLD_DAYS = 7;
+
+/**
+ * Fördelar Att fördela automatiskt i innevarande lönemånad.
+ *
+ *  1. Grundbelopp: hinkarna i prioritetsordning får det som fattas av
+ *     månadsbeloppet för perioden, men saldot går aldrig över taket.
+ *  2. Överskott: det som blir kvar går till hinkar med överskottsordning
+ *     1, 2, 3 … upp till taket. Hinkar med samma ordning delar lika.
+ *
+ * En period som började före startdatumet fördelas inte; den fylldes på
+ * för hand. Raderna är periodens nya totalbelopp per hink och källa, så
+ * samma tillstånd ger alltid samma rader och dubbla körningar gör inget.
+ * `added` är det som lades till nu, `waitUntil` när en pausad fördelning sker.
+ */
+export function autoAllocate(state) {
+  const { settings, allocations } = state;
+  const budget = computeBudget(state);
+  const { start, end } = budget.period;
+  const out = { rows: [], added: [], waitUntil: null };
+  if (!settings.start_date || start < settings.start_date || addDays(end, 1 - HOLD_DAYS) <= state.today) {
+    if (budget.attFordela > 0) out.waitUntil = addDays(end, 1);
+    return out;
+  }
+  let left = budget.attFordela;
+  if (left <= 0) return out;
+
+  const order = priorityOrder(state.buckets);
+  const added = new Map();
+  const addedTo = (id) => (added.get(`${id}|base`) ?? 0) + (added.get(`${id}|overflow`) ?? 0);
+  const room = (b) => (b.cap_amount == null ? Infinity : Math.max(0, b.cap_amount - budget.buckets.get(b.id).balance - addedTo(b.id)));
+  const give = (b, source, amount) => {
+    if (amount <= 0) return;
+    const key = `${b.id}|${source}`;
+    added.set(key, (added.get(key) ?? 0) + amount);
+    left -= amount;
+  };
+  const existing = (id, source) =>
+    allocations.filter((a) => a.bucket_id === id && a.period_start === start && (a.source ?? "base") === source).reduce((s, a) => s + a.amount, 0);
+
+  for (const b of order) {
+    if (left <= 0) break;
+    give(b, "base", Math.min(left, room(b), b.monthly_amount - existing(b.id, "base")));
+  }
+
+  const ranks = [...new Set(order.map((b) => b.overflow_rank).filter((r) => r != null))].sort((a, b) => a - b);
+  for (const rank of ranks) {
+    let group = order.filter((b) => b.overflow_rank === rank);
+    // Dela lika i hela kronor. Når en hink taket går resten till de andra.
+    while (left > 0 && (group = group.filter((b) => room(b) > 0)).length) {
+      const share = Math.floor(left / group.length / 100) * 100;
+      if (!share) {
+        give(group[0], "overflow", Math.min(left, room(group[0])));
+        continue;
+      }
+      for (const b of group) give(b, "overflow", Math.min(share, room(b)));
+    }
+  }
+
+  for (const [key, amount] of added) {
+    const [bucket_id, source] = key.split("|");
+    out.rows.push({ bucket_id, period_start: start, source, amount: existing(bucket_id, source) + amount });
+    out.added.push({ bucket_id, source, amount });
   }
   return out;
 }
 
-/**
- * Påfyllningar som saknas: en per aktiv hink med månadsbelopp och period.
- * @returns {{bucket_id: string, period_start: string, amount: number}[]}
- */
-export function missingAllocations({ settings, buckets, allocations, today }) {
-  const starts = periodStartsBetween(settings.start_date, today, settings.period_start_day);
-  const have = new Set(allocations.map((a) => `${a.bucket_id}|${a.period_start}`));
-  const out = [];
-  for (const b of buckets) {
-    if (b.archived || !b.monthly_amount) continue;
-    const created = b.created_at ? b.created_at.slice(0, 10) : null;
-    for (const start of starts) {
-      // En ny hink fylls på från och med den period den skapades i.
-      if (created && periodFor(created, settings.period_start_day).start > start) continue;
-      if (!have.has(`${b.id}|${start}`)) {
-        out.push({ bucket_id: b.id, period_start: start, amount: b.monthly_amount });
-      }
-    }
+/** Lägger in nya totalbelopp från autoAllocate i en lista med påfyllningar. */
+export function mergeAllocations(allocations, rows) {
+  for (const row of rows) {
+    const same = allocations.find((a) => a.bucket_id === row.bucket_id && a.period_start === row.period_start && (a.source ?? "base") === row.source);
+    if (same) same.amount = row.amount;
+    else allocations.push({ ...row });
   }
-  return out;
+  return allocations;
 }
 
 /** Tar bort rader från bankkonton som är avstängda. De kommer tillbaka om kontot slås på igen. */

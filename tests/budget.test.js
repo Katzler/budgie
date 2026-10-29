@@ -1,8 +1,8 @@
 import {
   periodFor,
   periodStartOf,
-  periodStartsBetween,
-  missingAllocations,
+  autoAllocate,
+  mergeAllocations,
   computeBudget,
   activeTransactions,
   parseAmountToOre,
@@ -44,26 +44,113 @@ test("startdag 1 som hamnar på helg flyttas in i föregående månad", () => {
   eq(periodFor("2026-10-29", 1).key, "2026-10");
 });
 
-test("periodstarter mellan startdatum och idag", () => {
-  eq(periodStartsBetween("2026-10-01", "2026-12-26", 25), ["2026-10-23", "2026-11-25", "2026-12-25"]);
-  eq(periodStartsBetween("2026-10-23", "2026-10-23", 25), ["2026-10-23"]);
-  eq(periodStartsBetween("2026-10-24", "2026-11-01", 25), []);
+// --- Automatisk fördelning ----------------------------------------------
+
+/** Lönemånaden 25 nov–24 dec 2026, startsaldo 0 och en lön som kommer in. */
+function allocState({ buckets, income = 0, allocations = [], transactions = [], today = "2026-11-25", start_date = "2026-10-27" }) {
+  return {
+    settings: { start_date, start_balance: 0, period_start_day: 25 },
+    buckets: buckets.map((b, i) => ({ kind: "spending", monthly_amount: 0, cap_amount: null, overflow_rank: null, sort_order: i, name: b.id, ...b })),
+    allocations,
+    transfers: [],
+    transactions: income ? [{ date: "2026-11-25", amount: income, kind: "income" }, ...transactions] : transactions,
+    today,
+  };
+}
+const added = (r) => Object.fromEntries(r.added.map((a) => [`${a.bucket_id}|${a.source}`, a.amount]));
+
+test("lönen fyller månadsbeloppen i ordning", () => {
+  const r = autoAllocate(allocState({ income: 1000000, buckets: [{ id: "mat", monthly_amount: 700000 }, { id: "lyx", monthly_amount: 500000 }] }));
+  eq(added(r), { "mat|base": 700000, "lyx|base": 300000 });
+  eq(r.rows, [
+    { bucket_id: "mat", period_start: "2026-11-25", source: "base", amount: 700000 },
+    { bucket_id: "lyx", period_start: "2026-11-25", source: "base", amount: 300000 },
+  ]);
 });
 
-test("saknade påfyllningar skapas per hink och period", () => {
-  const settings = { start_date: "2026-10-01", period_start_day: 25 };
-  const buckets = [
-    { id: "mat", monthly_amount: 600000, created_at: "2026-09-01T00:00:00Z" },
-    { id: "ny", monthly_amount: 1000, created_at: "2026-11-30T00:00:00Z" },
-    { id: "arkiv", monthly_amount: 1000, archived: true },
-    { id: "noll", monthly_amount: 0 },
-  ];
-  const allocations = [{ bucket_id: "mat", period_start: "2026-10-23", amount: 600000 }];
-  const missing = missingAllocations({ settings, buckets, allocations, today: "2026-12-01" });
-  eq(missing, [
-    { bucket_id: "mat", period_start: "2026-11-25", amount: 600000 },
-    { bucket_id: "ny", period_start: "2026-11-25", amount: 1000 },
-  ]);
+test("privata hinkar fylls efter de gemensamma", () => {
+  const r = autoAllocate(
+    allocState({ income: 500000, buckets: [{ id: "egna", kind: "personal", monthly_amount: 500000 }, { id: "mat", monthly_amount: 400000 }] }),
+  );
+  eq(added(r), { "mat|base": 400000, "egna|base": 100000 });
+});
+
+test("taket stoppar påfyllningen och resten blir överskott", () => {
+  const s = allocState({
+    income: 1600000,
+    buckets: [{ id: "mat", monthly_amount: 700000, cap_amount: 1000000 }, { id: "buffert", kind: "savings", cap_amount: 10000000, overflow_rank: 1 }],
+    // 6 000 kr kvar i Livsmedel sedan förra månaden
+    allocations: [{ bucket_id: "mat", period_start: "2026-10-23", source: "base", amount: 600000 }],
+    start_date: "2026-10-01",
+  });
+  eq(added(autoAllocate(s)), { "mat|base": 400000, "buffert|overflow": 600000 });
+});
+
+test("överskottet fyller ordning 1 till taket, sedan delar ordning 2 lika", () => {
+  const r = autoAllocate(
+    allocState({
+      income: 1000000,
+      buckets: [
+        { id: "buffert", kind: "savings", cap_amount: 400000, overflow_rank: 1 },
+        { id: "resa", kind: "savings", cap_amount: 100000, overflow_rank: 2 },
+        { id: "jack", kind: "personal", overflow_rank: 2 },
+        { id: "julia", kind: "personal", overflow_rank: 2 },
+      ],
+    }),
+  );
+  // 6 000 kvar efter bufferten: 2 000 var, men Resa når taket vid 1 000 och resten delas av de andra.
+  eq(added(r), { "buffert|overflow": 400000, "resa|overflow": 100000, "jack|overflow": 250000, "julia|overflow": 250000 });
+});
+
+test("lika delning i hela kronor, öresresten till den första", () => {
+  const r = autoAllocate(allocState({ income: 100050, buckets: [{ id: "a", overflow_rank: 1 }, { id: "b", overflow_rank: 1 }, { id: "c", overflow_rank: 1 }] }));
+  eq(added(r), { "a|overflow": 33450, "b|overflow": 33300, "c|overflow": 33300 });
+});
+
+test("andra lönen samma månad fyller bara det som fattas", () => {
+  const s = allocState({
+    income: 1600000,
+    buckets: [{ id: "mat", monthly_amount: 700000 }, { id: "lyx", monthly_amount: 500000 }, { id: "buffert", overflow_rank: 1 }],
+    allocations: [
+      { bucket_id: "mat", period_start: "2026-11-25", source: "base", amount: 700000 },
+      { bucket_id: "lyx", period_start: "2026-11-25", source: "base", amount: 100000 },
+    ],
+    today: "2026-12-01",
+  });
+  const r = autoAllocate(s);
+  eq(added(r), { "lyx|base": 400000, "buffert|overflow": 400000 });
+  eq(r.rows.find((x) => x.bucket_id === "lyx").amount, 500000, "nytt totalbelopp");
+});
+
+test("samma tillstånd fördelas bara en gång", () => {
+  const s = allocState({ income: 1000000, buckets: [{ id: "mat", monthly_amount: 700000 }, { id: "buffert", overflow_rank: 1 }] });
+  mergeAllocations(s.allocations, autoAllocate(s).rows);
+  eq(computeBudget(s).attFordela, 0);
+  eq(autoAllocate(s).rows, []);
+});
+
+test("perioden före startdatumet fördelas inte", () => {
+  const s = allocState({ buckets: [{ id: "mat", monthly_amount: 700000 }], today: "2026-11-14", start_date: "2026-10-27" });
+  s.transactions = [{ date: "2026-11-14", amount: 3000000, kind: "income" }];
+  const r = autoAllocate(s);
+  eq(r.rows, []);
+  eq(r.waitUntil, "2026-11-25");
+});
+
+test("lön som kommer sista veckan väntar till nästa lönemånad", () => {
+  // Lönen före jul kommer den 23 december, perioden slutar den 24.
+  const s = allocState({ buckets: [{ id: "buffert", overflow_rank: 1 }], today: "2026-12-23" });
+  s.transactions = [{ date: "2026-12-23", amount: 6000000, kind: "income" }];
+  const r = autoAllocate(s);
+  eq(r.rows, []);
+  eq(r.waitUntil, "2026-12-25");
+  eq(autoAllocate({ ...s, today: "2026-12-25" }).added.length, 1);
+});
+
+test("inget fördelas när Att fördela är tomt eller negativt", () => {
+  const s = allocState({ buckets: [{ id: "mat", monthly_amount: 700000 }] });
+  s.transactions = [{ date: "2026-11-26", amount: -50000, kind: "income" }];
+  eq(autoAllocate(s).rows, []);
 });
 
 // --- Saldon -----------------------------------------------------------

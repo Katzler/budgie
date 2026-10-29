@@ -51,7 +51,8 @@ Deno.serve(
 
     // Den andra i hushållet får en notis; den som betalade ser svaret i genvägen.
     const who = state.members.find((m: any) => m.user_id === saved.user_id)?.name ?? "";
-    await sendPush(db, { title: `${who}: ${merchant} ${formatKr(amount)}`, body: text, url: `./#/tx/${row.id}`, tag: row.id }, { excludeUserId: saved.user_id });
+    const where = bucket ? `${bucket.icon} ${bucket.name}` : cls.kind === "income" ? "💰 Att fördela" : "📥 Osorterat";
+    await sendPush(db, { title: `${who}: ${merchant}`, body: `${formatKr(amount)} → ${where}`, url: `./#/tx/${row.id}`, tag: row.id }, { excludeUserId: saved.user_id });
 
     return json({ text, bucket: bucket?.name ?? null, remaining });
   }),

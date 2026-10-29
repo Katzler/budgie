@@ -26,7 +26,7 @@ winget install OpenJS.NodeJS.LTS Git.Git
 ### 1. Supabase
 
 1. Skapa ett projekt på [supabase.com](https://supabase.com). Välj regionen **Stockholm (eu-north-1)**.
-2. Öppna **SQL Editor** och kör hela [supabase/migrations/001_schema.sql](supabase/migrations/001_schema.sql).
+2. Öppna **SQL Editor** och kör filerna i [supabase/migrations](supabase/migrations) i nummerordning, med början på `001_schema.sql`.
 3. Gå till **Authentication → Sign In / Providers** och stäng av **Allow new users to sign up**.
 4. Gå till **Authentication → Users → Add user** och skapa ett konto var. Kryssa i *Auto Confirm User*.
 5. Koppla kontona till hushållet i SQL Editor:
@@ -120,7 +120,9 @@ npx supabase functions deploy api quick --use-api
 | Begrepp | Betydelse |
 |---|---|
 | **Lönemånad** | Börjar på lönedagen (standard den 25:e). Infaller den på en helg börjar månaden närmaste vardag innan. |
-| **Påfyllning** | Varje lönedag får varje hink sitt månadsbelopp. |
+| **Påfyllning** | När det finns pengar i Att fördela får hinkarna, i listans ordning, det som fattas av månadens månadsbelopp. Saldot går aldrig över hinkens **tak**. |
+| **Överskott** | Det som blir kvar går till hinkar med överskott 1, sedan 2 och så vidare, upp till taket. Samma nummer delar lika. |
+| **Väntetid** | De sista 7 dagarna före lönedagen fördelas inget, så att en lön som kommer tidigt (t.ex. före jul) fyller nästa månad. Den första lönemånaden fylls på för hand. |
 | **Kvar i hinken** | Alla påfyllningar + flyttar in − flyttar ut + köp och återbetalningar sedan start. Överskott följer därför med till nästa månad, och överdrag dras av. |
 | **Att fördela** | Startsaldo + inkomster − påfyllningar. Blir det minus har ni budgeterat mer än ni har. |
 | **Osorterat** | Köp som ännu inte hamnat i någon hink. |
@@ -141,11 +143,11 @@ index.html, css/, js/              Webbappen (ren HTML/JS, inget byggsteg)
   js/app.js                        Vyer och router
   js/store.js                      Datalager: Supabase eller demoläge
 supabase/functions/_shared/        Kod som delas mellan app och server
-  budget.js                        Lönemånad, saldon, belopp
+  budget.js                        Lönemånad, saldon, fördelning, belopp
   categorize.js                    Regler och matchning
 supabase/functions/api/            Bankkoppling, hämtning, testnotis
 supabase/functions/quick/          Apple Pay-genvägen
-supabase/migrations/001_schema.sql Tabeller och Row Level Security
+supabase/migrations/               Tabeller och Row Level Security, i nummerordning
 supabase/cron.sql                  Hämtning 4 gånger per dygn
 tests/                             Tester, öppna tests/index.html i webbläsaren
 tools/vapid.html                   Skapar nycklar för notiser
