@@ -1,0 +1,316 @@
+// Pixelgrafik: ikoner och undulaten ritas som rutnät av tecken, där varje
+// tecken är en färg och "." är genomskinligt. "k" är konturen och följer
+// textfärgen (currentColor), övriga färger kommer från CSS-variabler så att
+// de kan justeras för mörkt läge.
+
+const COLORS = {
+  k: "currentColor",
+  w: "var(--px-w, #fffaf0)",
+  s: "var(--px-s, #bdb8c6)",
+  S: "var(--px-S, #77727f)",
+  g: "var(--px-g, #6fbf5f)",
+  G: "var(--px-G, #3a8a3f)",
+  y: "var(--px-y, #f5cd4f)",
+  o: "var(--px-o, #e8873a)",
+  r: "var(--px-r, #e0564c)",
+  R: "var(--px-R, #9e3340)",
+  b: "var(--px-b, #62b0dc)",
+  B: "var(--px-B, #2f6fa8)",
+  n: "var(--px-n, #b07443)",
+  p: "var(--px-p, #f09fb6)",
+};
+
+// Enfärgade gränssnittsikoner, 8 × 8.
+const UI = {
+  home: ["...kk...", "..kkkk..", ".kkkkkk.", "kkkkkkkk", ".kkkkkk.", ".kk..kk.", ".kk..kk.", ".kk..kk."],
+  list: ["kk.kkkkk", "........", "kk.kkkkk", "........", "kk.kkkkk", "........", "kk.kkkkk", "........"],
+  gear: ["...kk...", ".k.kk.k.", "..kkkk..", "kkk..kkk", "kkk..kkk", "..kkkk..", ".k.kk.k.", "...kk..."],
+  back: ["....kk..", "...kk...", "..kk....", ".kk.....", ".kk.....", "..kk....", "...kk...", "....kk.."],
+  next: ["..kk....", "...kk...", "....kk..", ".....kk.", ".....kk.", "....kk..", "...kk...", "..kk...."],
+  up: ["........", "........", "...kk...", "..kkkk..", ".kk..kk.", "kk....kk", "........", "........"],
+  down: ["........", "........", "kk....kk", ".kk..kk.", "..kkkk..", "...kk...", "........", "........"],
+  refresh: ["..kkkk.k", ".k....kk", "k....kkk", "k.......", "k.......", "k......k", ".k....k.", "..kkkk.."],
+  close: ["kk....kk", "kkk..kkk", ".kkkkkk.", "..kkkk..", "..kkkk..", ".kkkkkk.", "kkk..kkk", "kk....kk"],
+  plus: ["...kk...", "...kk...", "...kk...", "kkkkkkkk", "kkkkkkkk", "...kk...", "...kk...", "...kk..."],
+};
+
+// Färgade ikoner, 12 × 12.
+const ART = {
+  // Undulaten är maskot och appikon, därför lite större (16 × 16).
+  budgie: [
+    "......kkkkk.....",
+    ".....kyyyyyk....",
+    "....kyyyyyyyk...",
+    "...kyyyyyyykyk..",
+    "...kkyyyyyyyyBk.",
+    "...kykyyyyyyyook",
+    "...kkyyyybbyyok.",
+    "..kgkkyyyyyyyk..",
+    ".kgGgkkyyyyykk..",
+    ".kGGGGGkgggggk..",
+    "kGyGGyGgkggggk..",
+    "kGGyGGgkgggggk..",
+    ".kGGGyGkggggk...",
+    "..kGGkkkkkkk....",
+    "..kBBk.kSk.kSk..",
+    "...kBBk.........",
+  ],
+  bill: [
+    "..kkkkkkkk..",
+    "..kwwwwwwk..",
+    "..kwSSSSwk..",
+    "..kwwwwwwk..",
+    "..kwSSSwwk..",
+    "..kwwwwwwk..",
+    "..kwSSSSwk..",
+    "..kwwwwwwk..",
+    "..kwwSSSwk..",
+    "..kwwwwwwk..",
+    "..kwkwwkwk..",
+    "..k.k..k.k..",
+  ],
+  cart: [
+    "............",
+    "kk..........",
+    ".k..........",
+    ".kkkkkkkkkkk",
+    ".kgggggggggk",
+    ".kgGgGgGggk.",
+    "..kggggggk..",
+    "..kkkkkkkk..",
+    "..k.........",
+    "..kkkkkkkk..",
+    "...kk...kk..",
+    "............",
+  ],
+  bottle: [
+    "....kkkkk...",
+    "....kSSkk...",
+    ".....kk.....",
+    ".....kk.....",
+    "....kkkk....",
+    "...kbbbbk...",
+    "..kbbbbbbk..",
+    "..kbwwwwbk..",
+    "..kbwbbwbk..",
+    "..kbwwwwbk..",
+    "..kbbbbbbk..",
+    "...kkkkkk...",
+  ],
+  train: [
+    "...kkkkkk...",
+    "..kbbbbbbk..",
+    ".kbkkkkkkbk.",
+    ".kbkwwwwkbk.",
+    ".kbkwwwwkbk.",
+    ".kbkkkkkkbk.",
+    ".kbbbbbbbbk.",
+    ".kbybbbbybk.",
+    ".kbbbbbbbbk.",
+    "..kkkkkkkk..",
+    "..kk....kk..",
+    ".kk......kk.",
+  ],
+  wine: [
+    "...kkkkkk...",
+    "...kwwwwk...",
+    "..kwwwwwwk..",
+    "..kRRRRRRk..",
+    "..kRrRRRRk..",
+    "...kRRRRk...",
+    "....kkkk....",
+    ".....kk.....",
+    ".....kk.....",
+    ".....kk.....",
+    "...kkkkkk...",
+    "............",
+  ],
+  gift: [
+    "..kk....kk..",
+    ".kyyk..kyyk.",
+    "..kyykkyyk..",
+    ".kkkkkkkkkk.",
+    ".krrrryrrrk.",
+    ".krrrryrrrk.",
+    ".kkkkkkkkkk.",
+    "..krrryrrk..",
+    "..krrryrrk..",
+    "..krrryrrk..",
+    "..krrryrrk..",
+    "..kkkkkkkk..",
+  ],
+  plane: [
+    ".....kk.....",
+    "....kwwk....",
+    "....kbbk....",
+    "...kkwwkk...",
+    ".kkwwwwwwkk.",
+    "kwwwwwwwwwwk",
+    "kkkkkwwkkkkk",
+    "....kwwk....",
+    "....kwwk....",
+    "...kkwwkk...",
+    "..kwwwwwwk..",
+    "..kkkkkkkk..",
+  ],
+  wrench: [
+    ".......kk.k.",
+    "......kssksk",
+    "......kssssk",
+    ".....kssssk.",
+    "....ksssk...",
+    "...ksssk....",
+    "..ksssk.....",
+    ".ksssk......",
+    "ksssk.......",
+    "kssk........",
+    ".kk.........",
+    "............",
+  ],
+  ring: [
+    "...kkkkkk...",
+    "..krrwwrrk..",
+    ".krrkkkkrrk.",
+    "krrk....krrk",
+    "kwwk....kwwk",
+    "kwwk....kwwk",
+    "kwwk....kwwk",
+    "kwwk....kwwk",
+    "krrk....krrk",
+    ".krrkkkkrrk.",
+    "..krrwwrrk..",
+    "...kkkkkk...",
+  ],
+  cap: [
+    "............",
+    "............",
+    "....kkkk....",
+    "..kkbbbbkk..",
+    ".kbbbbbbbbk.",
+    ".kbbbwbbbbk.",
+    "kbbbbbbbbbbk",
+    "kbbbbbbbbbbk",
+    "kkkkkkkkkkkk",
+    "......kBBBBk",
+    "......kkkkk.",
+    "............",
+  ],
+  bag: [
+    "....kkkk....",
+    "...k....k...",
+    "...k....k...",
+    ".kkkkkkkkkk.",
+    ".knnnnnnnnk.",
+    ".knnnnnnnnk.",
+    ".kkkkyykkkk.",
+    ".knnnnnnnnk.",
+    ".knnnnnnnnk.",
+    ".knnnnnnnnk.",
+    ".kkkkkkkkkk.",
+    "............",
+  ],
+  purse: [
+    "............",
+    "....kkkk....",
+    "...ky..yk...",
+    "..kkkkkkkk..",
+    ".kppppppppk.",
+    ".kppppppppk.",
+    ".kpwppppppk.",
+    ".kppppppppk.",
+    "..kppppppk..",
+    "...kkkkkk...",
+    "............",
+    "............",
+  ],
+  coin: [
+    "...kkkkkk...",
+    "..kyyyyyyk..",
+    ".kyywyyyyok.",
+    "kyywyyyyyyok",
+    "kywyyooyyyok",
+    "kyyyyooyyyok",
+    "kyyyyooyyyok",
+    "kyyyyooyyyok",
+    "kyyyyyyyyyok",
+    ".kyyyyyyyok.",
+    "..kooooook..",
+    "...kkkkkk...",
+  ],
+  bucket: [
+    "............",
+    "...kkkkkk...",
+    "..k......k..",
+    ".k........k.",
+    "kkkkkkkkkkkk",
+    "kbbbbbbbbbbk",
+    ".kbwbbbbbbk.",
+    ".kbwbbbbbbk.",
+    ".kbbbbbbbbk.",
+    "..kbbbbbbk..",
+    "..kbbbbbbk..",
+    "..kkkkkkkk..",
+  ],
+  inbox: [
+    ".....kk.....",
+    ".....kk.....",
+    ".....kk.....",
+    "...kkkkkk...",
+    "....kkkk....",
+    ".....kk.....",
+    "............",
+    "kkkk....kkkk",
+    "k..kkkkkk..k",
+    "k..........k",
+    "k..........k",
+    "kkkkkkkkkkkk",
+  ],
+};
+
+/** Vilken pixelikon en emoji motsvarar. Hinkar med andra emojis visar emojin. */
+const EMOJI = {
+  "🧾": "bill",
+  "🛒": "cart",
+  "🧴": "bottle",
+  "🚇": "train",
+  "🚌": "train",
+  "🍷": "wine",
+  "🎁": "gift",
+  "✈": "plane",
+  "🔧": "wrench",
+  "🛟": "ring",
+  "🧢": "cap",
+  "👜": "bag",
+  "👛": "purse",
+  "💰": "coin",
+  "🪣": "bucket",
+  "🐦": "budgie",
+  "🦜": "budgie",
+};
+export const PIXEL_EMOJIS = Object.keys(EMOJI).filter((e) => !["🚌", "🦜", "🐦"].includes(e));
+
+export const SPRITES = { ...UI, ...ART };
+export const PALETTE = COLORS;
+
+/** SVG-sträng för en ikon. Varje färg blir en path, så att DOM:en förblir liten. */
+export function px(name, scale = 2, cls = "px") {
+  const rows = SPRITES[name];
+  const paths = {};
+  rows.forEach((row, y) => {
+    for (let x = 0; x < row.length; x++) {
+      const c = row[x];
+      if (c !== ".") paths[c] = (paths[c] || "") + `M${x} ${y}h1v1h-1z`;
+    }
+  });
+  const w = rows[0].length;
+  const h = rows.length;
+  const body = Object.entries(paths)
+    .map(([c, d]) => `<path d="${d}" style="fill:${COLORS[c]}"/>`)
+    .join("");
+  return `<svg class="${cls}" width="${w * scale}" height="${h * scale}" viewBox="0 0 ${w} ${h}" shape-rendering="crispEdges" aria-hidden="true">${body}</svg>`;
+}
+
+const normalize = (emoji) => String(emoji ?? "").replace(/️/g, "").trim();
+
+/** Pixelikonens namn för en emoji, eller null. */
+export const spriteFor = (emoji) => EMOJI[normalize(emoji)] ?? null;

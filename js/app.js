@@ -15,6 +15,7 @@ import {
   parseISODate,
 } from "../supabase/functions/_shared/budget.js";
 import { matchRule, suggestPattern, defaultRulesFor } from "../supabase/functions/_shared/categorize.js";
+import { px, spriteFor, PIXEL_EMOJIS } from "./pixel.js";
 
 const app = document.getElementById("app");
 const S = { store: null, session: null, db: null, me: null, hidden: new Set(), budget: null, handlers: {} };
@@ -144,16 +145,12 @@ async function syncBank({ silent = false } = {}) {
 
 // --- Layout -------------------------------------------------------------------
 
-const icons = {
-  home: '<path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>',
-  list: '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>',
-  gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
-  refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/>',
-  back: '<path d="M15 18l-6-6 6-6"/>',
-  up: '<path d="M6 15l6-6 6 6"/>',
-  down: '<path d="M6 9l6 6 6-6"/>',
-};
-const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name]}</svg>`;
+const icon = (name, scale = 3) => px(name, scale);
+/** Hinkens ikon: pixelversionen om det finns en, annars emojin. */
+function bucketIcon(emoji, scale = 2) {
+  const name = spriteFor(emoji);
+  return name ? px(name, scale, "px art") : `<span class="emoji">${esc(emoji)}</span>`;
+}
 
 function page({ title, back, action = "", body, tabs = true }) {
   const hash = location.hash.split("?")[0] || "#/";
@@ -185,15 +182,15 @@ function page({ title, back, action = "", body, tabs = true }) {
 function bucketChips(selectedId, { includeIncome = true, selectedIncome = false } = {}) {
   return `<div class="chips">
     ${myBuckets()
-      .map((b) => `<button type="button" class="chip${b.id === selectedId ? " selected" : ""}" data-act="pick" data-bucket="${b.id}">${esc(b.icon)} ${esc(b.name)}</button>`)
+      .map((b) => `<button type="button" class="chip${b.id === selectedId ? " selected" : ""}" data-act="pick" data-bucket="${b.id}">${bucketIcon(b.icon)}${esc(b.name)}</button>`)
       .join("")}
-    ${includeIncome ? `<button type="button" class="chip income${selectedIncome ? " selected" : ""}" data-act="pick" data-bucket="income">💰 Inkomst / Att fördela</button>` : ""}
+    ${includeIncome ? `<button type="button" class="chip income${selectedIncome ? " selected" : ""}" data-act="pick" data-bucket="income">${bucketIcon("💰")}Inkomst / Att fördela</button>` : ""}
   </div>`;
 }
 
 function txRow(t, { showBucket = true } = {}) {
   const b = t.bucket_id ? bucketById(t.bucket_id) : null;
-  const where = t.kind === "income" ? "Att fördela" : b ? `${b.icon} ${b.name}` : '<span class="warn">Osorterad</span>';
+  const where = t.kind === "income" ? "Att fördela" : b ? b.name : '<span class="warn">Osorterad</span>';
   const badge =
     t.status === "pending" ? '<span class="pill">Kommande</span>' : t.status === "quick" ? '<span class="pill">Apple Pay</span>' : t.status === "manual" ? '<span class="pill">Manuell</span>' : "";
   return `<a class="row tx" href="#/tx/${t.id}">
@@ -221,7 +218,7 @@ function bucketOptions(selected, { includeAttFordela = false, includeIncome = fa
 function viewLogin() {
   app.innerHTML = `
     <div class="login">
-      <div class="logo">🪣</div>
+      <div class="logo">${px("budgie", 6, "px art")}</div>
       <h1>Budgie</h1>
       <p class="muted">Er gemensamma hinkbudget</p>
       <form data-submit="login" class="card form">
@@ -266,13 +263,14 @@ function viewHome() {
   const diff = bankBalance == null ? null : B.total - bankBalance;
 
   page({
-    title: `${monthLabel(p.key)}`,
+    title: `${px("budgie", 2, "px art mascot")}${monthLabel(p.key)}`,
     body: `
       <p class="period muted">${shortDate(p.start)} – ${shortDate(p.end)} · ${daysLeft} ${daysLeft === 1 ? "dag" : "dagar"} kvar</p>
       ${
         B.attFordela !== 0
           ? `<a class="card att-fordela ${B.attFordela < 0 ? "neg" : ""}" href="#/flytta?from=">
-              <div><div class="label">Att fördela</div>
+              ${px("coin", 3, "px art")}
+              <div class="grow"><div class="label">Att fördela</div>
               <div class="muted small">${
                 B.attFordela < 0
                   ? "Ni har fördelat mer än ni har"
@@ -284,7 +282,7 @@ function viewHome() {
             </a>`
           : ""
       }
-      ${B.uncategorizedCount ? `<a class="card notice" href="#/transaktioner">📥 ${B.uncategorizedCount} köp att sortera (${krR(B.uncategorized)}) →</a>` : ""}
+      ${B.uncategorizedCount ? `<a class="card notice" href="#/transaktioner">${px("inbox", 2)}<span class="grow">${B.uncategorizedCount} köp att sortera (${krR(B.uncategorized)})</span>${icon("next", 2)}</a>` : ""}
       ${group("Löpande", buckets.filter((b) => b.kind === "spending"), 2)}
       ${group("Sparande", buckets.filter((b) => b.kind === "savings"), 3)}
       ${group("Egna", buckets.filter((b) => b.kind === "personal"), 2)}
@@ -326,11 +324,17 @@ function bucketTile(b) {
         : savings
           ? `+${krR(b.monthly_amount)}/mån`
           : `av ${krR(s.periodTotal)}`;
-  const level = s.balance < 0 ? "neg" : s.ratio < 0.2 && !savings ? "low" : "";
+  const level = s.balance < 0 ? "neg" : s.ratio < 0.2 && !savings ? "low" : savings ? "saving" : "";
+  // Mätaren visar hur mycket av månadens pengar som är kvar, för sparhinkar hur
+  // nära taket de är. Sparhinkar utan tak har ingen mätare.
+  const fill = s.balance < 0 ? 1 : savings ? (b.cap_amount ? Math.max(0, Math.min(1, s.balance / b.cap_amount)) : null) : s.ratio;
+  const on = fill == null ? 0 : fill > 0 ? Math.max(1, Math.round(fill * 10)) : 0;
+  const meter = fill == null ? "" : `<span class="meter">${"<i class=on></i>".repeat(on)}${"<i></i>".repeat(10 - on)}</span>`;
   return `<a class="tile ${level}" href="#/hink/${b.id}" aria-label="${esc(b.name)}, ${krR(s.balance)} kvar">
-    <span class="tile-head"><span class="tile-icon">${esc(b.icon)}</span><span class="tile-name">${esc(b.name)}</span></span>
+    <span class="tile-head"><span class="tile-icon">${bucketIcon(b.icon)}</span><span class="tile-name">${esc(b.name)}</span></span>
     <span class="tile-amount">${krR(s.balance)}</span>
     <span class="tile-sub">${sub}</span>
+    ${meter}
   </a>`;
 }
 
@@ -375,7 +379,7 @@ function viewTransactions() {
         .map(([key, list]) => `<h2 class="section">${monthLabel(key)}</h2><div class="card list">${list.map((t) => txRow(t)).join("")}</div>`)
         .join("")}
       ${sorted.length > txLimit ? `<button class="btn full more" data-act="more">Visa fler</button>` : ""}
-      ${all.length ? "" : `<div class="empty">🧾<p>Inga transaktioner än.</p></div>`}`,
+      ${all.length ? "" : `<div class="empty">${px("bill", 4, "px art")}<p>Inga transaktioner än.</p></div>`}`,
   });
   S.handlers = {
     expand: (el) => el.closest(".sort-item").classList.toggle("open"),
@@ -432,7 +436,7 @@ function viewBucket(id) {
     });
 
   page({
-    title: `${esc(b.icon)} ${esc(b.name)}`,
+    title: `${bucketIcon(b.icon)}${esc(b.name)}`,
     back: "#/",
     body: `
       <div class="card hero ${s.balance < 0 ? "neg" : ""}">
@@ -459,7 +463,7 @@ function viewBucket(id) {
                 return `<h2 class="section">${monthLabel(key)} <span class="muted">${kr(sum)}</span></h2><div class="card list">${list.map((t) => txRow(t, { showBucket: false })).join("")}</div>`;
               })
               .join("")
-          : `<div class="empty"><p>Inga köp i den här hinken än.</p></div>`
+          : `<div class="empty">${bucketIcon(b.icon, 4)}<p>Inga köp i den här hinken än.</p></div>`
       }`,
   });
   S.handlers = {};
@@ -526,7 +530,7 @@ function viewTransfer() {
   const from = q.has("from") ? q.get("from") : myBuckets()[0]?.id ?? "";
   const to = q.has("to") ? q.get("to") : q.has("from") && q.get("from") === "" ? myBuckets()[0]?.id ?? "" : "";
   const recent = S.db.transfers.filter(seenTransfer).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 15);
-  const name = (id) => (id ? `${bucketById(id)?.icon ?? ""} ${bucketById(id)?.name ?? "?"}` : "💰 Att fördela");
+  const name = (id) => (id ? bucketById(id)?.name ?? "?" : "Att fördela");
   page({
     title: "Flytta pengar",
     back: q.get("from") ? `#/hink/${q.get("from")}` : q.get("to") ? `#/hink/${q.get("to")}` : "#/",
@@ -545,7 +549,7 @@ function viewTransfer() {
                 (t) => `<div class="row"><div class="row-main"><div class="row-title">${esc(name(t.from_bucket))} → ${esc(name(t.to_bucket))}</div>
                   <div class="row-sub">${relDate(t.created_at.slice(0, 10))}${t.created_by ? ` · ${esc(memberName(t.created_by))}` : ""}${t.note ? ` · ${esc(t.note)}` : ""}</div></div>
                   <div class="row-amount">${kr(t.amount)}</div>
-                  <button class="icon-btn small" data-act="undo" data-id="${t.id}" aria-label="Ångra flytt">✕</button></div>`,
+                  <button class="icon-btn small" data-act="undo" data-id="${t.id}" aria-label="Ångra flytt">${icon("close", 2)}</button></div>`,
               )
               .join("")}</div>`
           : ""
@@ -587,7 +591,7 @@ function viewSettings() {
         ${ordered
           .map(
             (b, i) => `<div class="row sortable">
-              <a class="row-link" href="#/installningar/hink/${b.id}"><div class="bucket-icon">${esc(b.icon)}</div><div class="row-main"><div class="row-title">${esc(b.name)}</div><div class="row-sub">${[{ spending: "Löpande", savings: "Sparhink", personal: `Privat · ${esc(memberName(b.owner_id))}` }[b.kind], b.cap_amount != null ? `tak ${krR(b.cap_amount)}` : "", b.overflow_rank ? `överskott ${b.overflow_rank}` : ""].filter(Boolean).join(" · ")}</div></div><div class="row-amount">${kr(b.monthly_amount)}</div></a>
+              <a class="row-link" href="#/installningar/hink/${b.id}"><div class="bucket-icon">${bucketIcon(b.icon)}</div><div class="row-main"><div class="row-title">${esc(b.name)}</div><div class="row-sub">${[{ spending: "Löpande", savings: "Sparhink", personal: `Privat · ${esc(memberName(b.owner_id))}` }[b.kind], b.cap_amount != null ? `tak ${krR(b.cap_amount)}` : "", b.overflow_rank ? `överskott ${b.overflow_rank}` : ""].filter(Boolean).join(" · ")}</div></div><div class="row-amount">${kr(b.monthly_amount)}</div></a>
               <div class="move">
                 <button class="icon-btn small" data-act="move" data-id="${b.id}" data-dir="-1" aria-label="Flytta upp" ${sameGroup(b, ordered[i - 1]) ? "" : "disabled"}>${icon("up")}</button>
                 <button class="icon-btn small" data-act="move" data-id="${b.id}" data-dir="1" aria-label="Flytta ner" ${sameGroup(b, ordered[i + 1]) ? "" : "disabled"}>${icon("down")}</button>
@@ -595,15 +599,15 @@ function viewSettings() {
             </div>`,
           )
           .join("")}
-        <a class="row add" href="#/installningar/hink/ny">＋ Ny hink</a>
+        <a class="row add" href="#/installningar/hink/ny">${icon("plus", 2)}Ny hink</a>
       </div>
       <p class="muted small">När lönen kommer fylls hinkarna med sitt månadsbelopp i den här ordningen, aldrig över taket. Det som blir över går till hinkarna med överskott 1, sedan 2 och så vidare; samma nummer delar lika. De sista ${HOLD_DAYS} dagarna före lönedagen väntar fördelningen till nästa månad.</p>
 
       <h2 class="section">Sortering och bank</h2>
       <div class="card list">
-        <a class="row" href="#/installningar/regler"><div class="row-main"><div class="row-title">Regler</div><div class="row-sub">${S.db.rules.filter((r) => !hiddenBucket(r.bucket_id)).length} regler för automatisk sortering</div></div>›</a>
-        <a class="row" href="#/installningar/bank"><div class="row-main"><div class="row-title">Bankkoppling</div><div class="row-sub">${conn ? `Swedbank · hämtat ${timeAgo(conn.last_sync_at)}` : "Inte kopplad"}</div></div>›</a>
-        <a class="row" href="#/installningar/genvag"><div class="row-main"><div class="row-title">Apple Pay-genväg</div><div class="row-sub">Direkt besked när ni betalar med telefonen</div></div>›</a>
+        <a class="row" href="#/installningar/regler"><div class="row-main"><div class="row-title">Regler</div><div class="row-sub">${S.db.rules.filter((r) => !hiddenBucket(r.bucket_id)).length} regler för automatisk sortering</div></div>${icon("next", 2)}</a>
+        <a class="row" href="#/installningar/bank"><div class="row-main"><div class="row-title">Bankkoppling</div><div class="row-sub">${conn ? `Swedbank · hämtat ${timeAgo(conn.last_sync_at)}` : "Inte kopplad"}</div></div>${icon("next", 2)}</a>
+        <a class="row" href="#/installningar/genvag"><div class="row-main"><div class="row-title">Apple Pay-genväg</div><div class="row-sub">Direkt besked när ni betalar med telefonen</div></div>${icon("next", 2)}</a>
       </div>
 
       <h2 class="section">Notiser</h2>
@@ -684,6 +688,9 @@ function viewBucketEdit(id) {
           <label class="narrow">Ikon<input name="icon" value="${esc(b.icon)}" maxlength="4"></label>
           <label>Namn<input name="name" value="${esc(b.name)}" required></label>
         </div>
+        <div class="icon-pick" role="group" aria-label="Välj pixelikon">
+          ${PIXEL_EMOJIS.map((e) => `<button type="button" class="${spriteFor(e) === spriteFor(b.icon) ? "selected" : ""}" data-act="pickIcon" data-emoji="${e}" aria-label="${e}">${bucketIcon(e)}</button>`).join("")}
+        </div>
         <label>Typ<select name="kind">
           <option value="spending" ${b.kind === "spending" ? "selected" : ""}>Löpande – t.ex. Livsmedel</option>
           <option value="savings" ${b.kind === "savings" ? "selected" : ""}>Sparhink – t.ex. Resa, växer över tid</option>
@@ -705,6 +712,10 @@ function viewBucketEdit(id) {
       ${isNew ? "" : `<button class="btn danger full" data-act="archive">Ta bort hinken</button><p class="muted small center">${balance && !hiddenBucket(id) ? `Saldot (${kr(balance)}) flyttas till Att fördela.` : ""} Gamla köp blir osorterade.</p>`}`,
   });
   S.handlers = {
+    pickIcon: (el) => {
+      el.form.icon.value = el.dataset.emoji;
+      for (const btn of el.parentElement.children) btn.classList.toggle("selected", btn === el);
+    },
     save: (f) =>
       run(async () => {
         const monthly = parseAmountToOre(f.get("monthly") || "0");
@@ -750,7 +761,7 @@ function viewBucketEdit(id) {
 
 function viewRules() {
   const rules = S.db.rules.filter((r) => !hiddenBucket(r.bucket_id)).sort((a, b) => a.pattern.localeCompare(b.pattern, "sv"));
-  const target = (r) => (r.kind === "income" ? "💰 Att fördela" : `${bucketById(r.bucket_id)?.icon ?? ""} ${bucketById(r.bucket_id)?.name ?? "?"}`);
+  const target = (r) => (r.kind === "income" ? "Att fördela" : bucketById(r.bucket_id)?.name ?? "?");
   page({
     title: "Regler",
     back: "#/installningar",
@@ -765,7 +776,7 @@ function viewRules() {
         <button class="btn" data-act="apply">Sortera osorterade nu</button>
       </div>
       <div class="card list">
-        ${rules.map((r) => `<div class="row"><div class="row-main"><div class="row-title">${esc(r.pattern)}</div><div class="row-sub">${esc(target(r))}</div></div><button class="icon-btn small" data-act="del" data-id="${r.id}" aria-label="Ta bort regel">✕</button></div>`).join("") || '<div class="row muted">Inga regler än.</div>'}
+        ${rules.map((r) => `<div class="row"><div class="row-main"><div class="row-title">${esc(r.pattern)}</div><div class="row-sub">${esc(target(r))}</div></div><button class="icon-btn small" data-act="del" data-id="${r.id}" aria-label="Ta bort regel">${icon("close", 2)}</button></div>`).join("") || '<div class="row muted">Inga regler än.</div>'}
       </div>`,
   });
   S.handlers = {
@@ -875,7 +886,7 @@ function viewShortcut() {
       ${
         tokens.length
           ? `<h2 class="section">Dina tokens</h2><div class="card list">${tokens
-              .map((t) => `<div class="row"><div class="row-main"><div class="row-title">${esc(t.label || "Token")}</div><div class="row-sub">Skapad ${shortDate(t.created_at.slice(0, 10))}</div></div><button class="icon-btn small" data-act="del" data-hash="${t.token_hash}" aria-label="Ta bort token">✕</button></div>`)
+              .map((t) => `<div class="row"><div class="row-main"><div class="row-title">${esc(t.label || "Token")}</div><div class="row-sub">Skapad ${shortDate(t.created_at.slice(0, 10))}</div></div><button class="icon-btn small" data-act="del" data-hash="${t.token_hash}" aria-label="Ta bort token">${icon("close", 2)}</button></div>`)
               .join("")}</div>`
           : ""
       }`,
