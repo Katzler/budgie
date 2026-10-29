@@ -29,11 +29,13 @@ self.addEventListener("activate", (event) => {
 });
 
 // Nätverket först så att uppdateringar syns direkt, cachen om man är offline.
+// "no-cache" kontrollerar mot servern även när webbläsarens HTTP-cache (GitHub
+// Pages skickar max-age=600) tycker att filen fortfarande är färsk.
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (event.request.method !== "GET" || url.origin !== location.origin) return;
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request, { cache: "no-cache" })
       .then((res) => {
         if (res.ok) {
           const copy = res.clone();
