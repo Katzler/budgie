@@ -101,7 +101,7 @@ async function createSupabaseStore() {
 
 // --- Demoläge ---------------------------------------------------------------
 
-const DEMO_KEY = "budgie-demo-v2";
+const DEMO_KEY = "budgie-demo-v3";
 
 function createDemoStore() {
   let db;

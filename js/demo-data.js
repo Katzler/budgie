@@ -22,7 +22,7 @@ export function demoSeed() {
   ];
 
   const bucketDefs = [
-    ["Räkningar", "🧾", "spending", null, 1850000],
+    ["Räkningar", "🧾", "savings", null, 1850000],
     ["Livsmedel", "🛒", "spending", null, 700000],
     ["Hushåll", "🧴", "spending", null, 150000],
     ["Transport", "🚇", "spending", null, 180000],

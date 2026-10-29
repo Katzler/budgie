@@ -284,7 +284,7 @@ function viewHome() {
       }
       ${B.uncategorizedCount ? `<a class="card notice" href="#/transaktioner">${px("inbox", 2)}<span class="grow">${B.uncategorizedCount} köp att sortera (${krR(B.uncategorized)})</span>${icon("next", 2)}</a>` : ""}
       ${group("Löpande", buckets.filter((b) => b.kind === "spending"), 2)}
-      ${group("Sparande", buckets.filter((b) => b.kind === "savings"), 3)}
+      ${group("Sparande och räkningar", buckets.filter((b) => b.kind === "savings"), 3)}
       ${group("Egna", buckets.filter((b) => b.kind === "personal"), 2)}
       <p class="footer-note muted small">
         ${
@@ -597,7 +597,7 @@ function viewSettings() {
         ${ordered
           .map(
             (b, i) => `<div class="row sortable">
-              <a class="row-link" href="#/installningar/hink/${b.id}"><div class="bucket-icon">${bucketIcon(b.icon)}</div><div class="row-main"><div class="row-title">${esc(b.name)}</div><div class="row-sub">${[{ spending: "Löpande", savings: "Sparhink", personal: `Privat · ${esc(memberName(b.owner_id))}` }[b.kind], b.cap_amount != null ? `tak ${krR(b.cap_amount)}` : "", b.overflow_rank ? `överskott ${b.overflow_rank}` : ""].filter(Boolean).join(" · ")}</div></div><div class="row-amount">${kr(b.monthly_amount)}</div></a>
+              <a class="row-link" href="#/installningar/hink/${b.id}"><div class="bucket-icon">${bucketIcon(b.icon)}</div><div class="row-main"><div class="row-title">${esc(b.name)}</div><div class="row-sub">${[{ spending: "Löpande", savings: "Sparande och räkningar", personal: `Privat · ${esc(memberName(b.owner_id))}` }[b.kind], b.cap_amount != null ? `tak ${krR(b.cap_amount)}` : "", b.overflow_rank ? `överskott ${b.overflow_rank}` : ""].filter(Boolean).join(" · ")}</div></div><div class="row-amount">${kr(b.monthly_amount)}</div></a>
               <div class="move">
                 <button class="icon-btn small" data-act="move" data-id="${b.id}" data-dir="-1" aria-label="Flytta upp" ${sameGroup(b, ordered[i - 1]) ? "" : "disabled"}>${icon("up")}</button>
                 <button class="icon-btn small" data-act="move" data-id="${b.id}" data-dir="1" aria-label="Flytta ner" ${sameGroup(b, ordered[i + 1]) ? "" : "disabled"}>${icon("down")}</button>
@@ -699,7 +699,7 @@ function viewBucketEdit(id) {
         </div>
         <label>Typ<select name="kind">
           <option value="spending" ${b.kind === "spending" ? "selected" : ""}>Löpande – t.ex. Livsmedel</option>
-          <option value="savings" ${b.kind === "savings" ? "selected" : ""}>Sparhink – t.ex. Resa, växer över tid</option>
+          <option value="savings" ${b.kind === "savings" ? "selected" : ""}>Sparande och räkningar – t.ex. Resa, Räkningar</option>
           <option value="personal" ${b.kind === "personal" ? "selected" : ""}>Privat – egna pengar</option>
         </select></label>
         <label>Ägare (för privata hinkar)<select name="owner">
@@ -920,7 +920,7 @@ function viewShortcut() {
 }
 
 const SUGGESTED = [
-  ["🧾", "Räkningar", "spending", 15000],
+  ["🧾", "Räkningar", "savings", 15000],
   ["🛒", "Livsmedel", "spending", 7000],
   ["🧴", "Hushåll", "spending", 1500],
   ["🚇", "Transport", "spending", 1500],
