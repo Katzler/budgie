@@ -136,7 +136,7 @@ async function notifyNew(db: Db, rows: any[], state: any) {
     await sendPush(db, {
       title: `${rows.length} nya transaktioner`,
       body: unsorted ? `${unsorted} behöver sorteras` : "Allt sorterat automatiskt",
-      url: unsorted ? "./#/sortera" : "./",
+      url: unsorted ? "./#/transaktioner" : "./",
       tag: "budgie-summary",
     });
     return;
