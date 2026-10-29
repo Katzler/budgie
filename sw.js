@@ -1,6 +1,6 @@
 // Service worker: tar emot push-notiser och cachar appens filer så att den
 // startar snabbt. Data hämtas alltid färskt från Supabase.
-const CACHE = "budgie-v2";
+const CACHE = "budgie-v3";
 const SHELL = [
   "./",
   "index.html",
@@ -15,7 +15,6 @@ const SHELL = [
   "manifest.webmanifest",
   "icons/icon.svg",
   "icons/budgie.svg",
-  "fonts/pixelify-sans.woff2",
 ];
 
 self.addEventListener("install", (event) => {
