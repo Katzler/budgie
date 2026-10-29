@@ -145,11 +145,41 @@ main {
 
 /* Hinkar */
 .bucket-icon { font-size: 26px; width: 36px; text-align: center; flex: none; }
-.bucket .row-amount { align-self: flex-start; margin-top: 2px; }
-.bar { height: 6px; border-radius: 3px; background: var(--bar-bg); margin-top: 7px; overflow: hidden; }
-.bar span { display: block; height: 100%; border-radius: 3px; background: var(--pos); transition: width 0.3s; }
-.bucket.low .bar span { background: var(--low); }
-.bucket.neg .row-amount, .bucket.neg .row-sub { color: var(--neg); }
+.tiles { display: grid; gap: 8px; margin-top: 12px; }
+.tiles.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.tiles.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.tiles.cols-2 > .tile:last-child:nth-child(odd) { grid-column: span 2; }
+.tile {
+  --fill: var(--pos);
+  position: relative; overflow: hidden; isolation: isolate;
+  display: flex; flex-direction: column; min-height: 88px; padding: 10px 12px;
+  background: var(--card); border-radius: var(--radius); color: inherit;
+}
+.tile:active { transform: scale(0.98); }
+.tile.low { --fill: var(--low); }
+.tile.neg { --fill: var(--neg); }
+.tile.saving { --fill: var(--accent); }
+.tile-fill {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: -1;
+  background: color-mix(in srgb, var(--fill) 16%, transparent);
+  border-top: 2px solid color-mix(in srgb, var(--fill) 45%, transparent);
+  transition: height 0.3s;
+}
+.tile-fill[style="height:0%"] { border-top: 0; }
+.tile-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.tile-icon { font-size: 18px; line-height: 1; flex: none; }
+.tile-name { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile-amount { margin-top: auto; padding-top: 6px; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tile-sub { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile.neg .tile-amount, .tile.neg .tile-sub { color: var(--neg); }
+.tile.low .tile-amount { color: var(--low); }
+.cols-3 .tile { min-height: 80px; padding: 8px 9px; }
+.cols-3 .tile-head { flex-direction: column; align-items: flex-start; gap: 4px; }
+.cols-3 .tile-name { max-width: 100%; }
+.cols-3 .tile-icon { font-size: 15px; }
+.cols-3 .tile-name { font-size: 13px; }
+.cols-3 .tile-amount { font-size: 15px; }
+.cols-3 .tile-sub { font-size: 11px; }
 
 .hero { text-align: center; padding: 20px 16px; }
 .hero .label { color: var(--muted); font-size: 14px; }

@@ -250,10 +250,8 @@ function viewHome() {
   const B = S.budget;
   const p = B.period;
   const daysLeft = daysBetween(today(), p.end) + 1;
-  const group = (title, list) =>
-    list.length
-      ? `<h2 class="section">${title}</h2><div class="card list">${list.map(bucketRow).join("")}</div>`
-      : "";
+  const group = (title, list, cols) =>
+    list.length ? `<h2 class="section">${title}</h2><div class="tiles cols-${cols}">${list.map(bucketTile).join("")}</div>` : "";
   const buckets = activeBuckets();
   const conns = S.db.bank_connections.filter((c) => c.enabled);
   const lastSync = conns.map((c) => c.last_sync_at).filter(Boolean).sort().pop();
@@ -280,8 +278,9 @@ function viewHome() {
           : ""
       }
       ${B.uncategorizedCount ? `<a class="card notice" href="#/transaktioner">📥 ${B.uncategorizedCount} köp att sortera (${krR(B.uncategorized)}) →</a>` : ""}
-      ${group("Gemensamma", buckets.filter((b) => b.kind !== "personal"))}
-      ${group("Privata", buckets.filter((b) => b.kind === "personal"))}
+      ${group("Löpande", buckets.filter((b) => b.kind === "spending"), 2)}
+      ${group("Sparande", buckets.filter((b) => b.kind === "savings"), 3)}
+      ${group("Egna", buckets.filter((b) => b.kind === "personal"), 2)}
       <p class="footer-note muted small">
         ${
           diff == null
@@ -309,28 +308,26 @@ function viewHome() {
   };
 }
 
-function bucketRow(b) {
+// Varje hink är en ruta som fylls nerifrån: löpande hinkar efter hur mycket
+// av månadens pengar som är kvar, sparhinkar efter hur nära taket de är.
+function bucketTile(b) {
   const s = S.budget.buckets.get(b.id);
-  const spent = -s.spentPeriod;
+  const savings = b.kind === "savings";
   const sub =
     s.balance < 0
       ? `Över med ${krR(-s.balance)}`
-      : b.kind === "savings" && b.cap_amount
-        ? `Mål ${krR(b.cap_amount)} · ${Math.min(100, Math.floor((s.balance / b.cap_amount) * 100))} %`
-        : b.kind === "savings"
-          ? `Sparhink · +${krR(b.monthly_amount)}/mån`
-          : `${krR(Math.max(0, spent))} av ${krR(s.periodTotal)} använt`;
-  const owner = b.kind === "personal" && b.owner_id ? ` <span class="muted small">${esc(memberName(b.owner_id))}</span>` : "";
-  const level = s.balance < 0 ? "neg" : s.ratio < 0.2 && b.kind !== "savings" ? "low" : "";
-  const fill = b.kind === "savings" && b.cap_amount ? Math.max(0, Math.min(1, s.balance / b.cap_amount)) : b.kind === "savings" && s.balance > 0 ? 1 : s.ratio;
-  return `<a class="row bucket ${level}" href="#/hink/${b.id}">
-    <div class="bucket-icon">${esc(b.icon)}</div>
-    <div class="row-main">
-      <div class="row-title">${esc(b.name)}${owner}</div>
-      <div class="row-sub">${sub}</div>
-      <div class="bar"><span style="width:${Math.round(fill * 100)}%"></span></div>
-    </div>
-    <div class="row-amount big">${krR(s.balance)}</div>
+      : savings && b.cap_amount
+        ? `av ${krR(b.cap_amount)}`
+        : savings
+          ? `+${krR(b.monthly_amount)}/mån`
+          : `av ${krR(s.periodTotal)}`;
+  const level = s.balance < 0 ? "neg" : s.ratio < 0.2 && !savings ? "low" : savings ? "saving" : "";
+  const fill = s.balance < 0 ? 1 : savings && b.cap_amount ? Math.max(0, Math.min(1, s.balance / b.cap_amount)) : savings && s.balance > 0 ? 1 : s.ratio;
+  return `<a class="tile ${level}" href="#/hink/${b.id}" aria-label="${esc(b.name)}, ${krR(s.balance)} kvar">
+    <span class="tile-fill" style="height:${Math.round(fill * 100)}%"></span>
+    <span class="tile-head"><span class="tile-icon">${esc(b.icon)}</span><span class="tile-name">${esc(b.name)}</span></span>
+    <span class="tile-amount">${krR(s.balance)}</span>
+    <span class="tile-sub">${sub}</span>
   </a>`;
 }
 
