@@ -915,7 +915,7 @@ function viewShortcut() {
 const SUGGESTED = [
   ["🧾", "Räkningar", "savings", 15000],
   ["🛒", "Livsmedel", "spending", 7000],
-  ["🧴", "Hushåll", "spending", 1500],
+  ["🧴", "Skönhet", "spending", 1500],
   ["🚇", "Transport", "spending", 1500],
   ["🍷", "Lyx", "spending", 2500],
   ["🎁", "Presenter", "savings", 800],

@@ -24,7 +24,7 @@ export function demoSeed() {
   const bucketDefs = [
     ["Räkningar", "🧾", "savings", null, 1850000],
     ["Livsmedel", "🛒", "spending", null, 700000],
-    ["Hushåll", "🧴", "spending", null, 150000],
+    ["Skönhet", "🧴", "spending", null, 150000],
     ["Transport", "🚇", "spending", null, 180000],
     ["Lyx", "🍷", "spending", null, 250000],
     ["Presenter", "🎁", "savings", null, 80000],
@@ -91,7 +91,7 @@ export function demoSeed() {
     tx(inPeriod(1), -97000, "SL ACCESS", "Transport"),
     tx(inPeriod(2), -71245, "ICA MAXI LINDHAGEN", "Livsmedel"),
     tx(inPeriod(2), -34900, "SYSTEMBOLAGET 0123", "Lyx"),
-    tx(inPeriod(1), -24900, "KRONANS APOTEK", "Hushåll"),
+    tx(inPeriod(1), -24900, "KRONANS APOTEK", "Skönhet"),
     tx(inPeriod(1), -38800, "WILLYS ODENPLAN", "Livsmedel"),
     tx(inPeriod(0), -12500, "ESPRESSO HOUSE", "Jacks pengar", { categorized_by: "user" }),
     tx(inPeriod(0), -42900, "LINDEX GALLERIAN", null),

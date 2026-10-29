@@ -68,7 +68,7 @@ export const DEFAULT_RULES = [
   { bucket: "Transport", patterns: ["sl", "circle k", "preem", "okq8", "st1", "ingo", "sj", "voi", "easypark", "parkster", "aimo", "vy ", "västtrafik", "skånetrafiken", "bolt", "uber"] },
   { bucket: "Räkningar", patterns: ["vattenfall", "ellevio", "eon", "e.on", "fortum", "telia", "tele2", "telenor", "comviq", "hallon", "tre ", "bahnhof", "netflix", "spotify", "hbo", "max.com", "viaplay", "disney", "folksam", "länsförsäkringar", "trygg-hansa", "if skadeförs", "csn", "hyra", "brf"] },
   { bucket: "Lyx", patterns: ["restaurang", "systembolaget", "filmstaden", "foodora", "wolt", "uber eats", "max burgers", "mcdonalds", "espresso house", "starbucks", "pressbyrån", "7-eleven", "bar", "pizzeria", "sushi"] },
-  { bucket: "Hushåll", patterns: ["apotek", "kronans", "ikea", "clas ohlson", "jula", "biltema", "rusta", "normal", "åhléns", "kicks", "lyko", "granit", "byggmax", "bauhaus"] },
+  { bucket: "Skönhet", patterns: ["apotek", "kronans", "ikea", "clas ohlson", "jula", "biltema", "rusta", "normal", "åhléns", "kicks", "lyko", "granit", "byggmax", "bauhaus"] },
   { bucket: "Resa", patterns: ["sas", "norwegian", "booking.com", "airbnb", "hotels.com", "ving", "tui", "apollo", "ryanair", "flygbussarna", "arlanda express", "scandic", "strawberry"] },
   { kind: "income", patterns: ["lön", "salary", "försäkringskassan", "skatteverket"] },
 ];
