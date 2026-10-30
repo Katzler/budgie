@@ -7,6 +7,7 @@ import { HttpError, handle, json } from "../_shared/http.ts";
 import { check, loadState, serviceClient } from "../_shared/db.ts";
 import { computeBudget, formatKr, parseAmountToOre, todayInSweden, visibleTo } from "../_shared/budget.js";
 import { classify } from "../_shared/categorize.js";
+import { sendPush } from "../_shared/push.ts";
 
 async function sha256(text: string) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
@@ -53,7 +54,8 @@ Deno.serve(
         ? `💰 Att fördela: ${kr(budget.attFordela)}`
         : `📥 ${formatKr(amount)} osorterat – öppna Budgie och välj hink`;
 
-    // Bara den som betalade får svar (i genvägen); den andra ser köpet i appen utan notis.
+    // Bara den som betalade får en notis, som öppnar köpet i Budgie. Den andra ser köpet i appen utan notis.
+    await sendPush(db, { title: `${merchant} · ${formatKr(amount)}`, body: text, url: `./#/tx/${row.id}`, tag: row.id }, { userIds: [saved.user_id] });
     return json({ text, bucket: shown ? bucket.name : null, remaining });
   }),
 );
