@@ -264,8 +264,10 @@ function viewHome() {
 
   page({
     title: `${px("budgie", 2, "px art mascot")}${monthLabel(p.key)}`,
+    action: '<span class="icon-btn-placeholder"><button class="arrange-done" data-act="doneArranging">Klar</button></span>',
     body: `
       <p class="period muted">${shortDate(p.start)} – ${shortDate(p.end)} · ${daysLeft} ${daysLeft === 1 ? "dag" : "dagar"} kvar</p>
+      <p class="arrange-hint muted small">Dra hinkarna i den ordning de ska fyllas när lönen kommer.</p>
       ${
         Math.abs(B.attFordela) >= 50 // visas avrundat, så ören som blir "0 kr" döljs
           ? `<a class="card att-fordela ${B.attFordela < 0 ? "neg" : ""}" href="#/flytta?from=">
@@ -298,7 +300,9 @@ function viewHome() {
       </p>
       ${diff ? `<button class="btn full" data-act="fixStart">Justera så att det stämmer med banken</button>` : ""}`,
   });
+  app.classList.toggle("arranging", arranging);
   S.handlers = {
+    doneArranging: () => setArranging(false),
     // Skillnaden mot banken beror nästan alltid på att startsaldot var fel.
     fixStart: () =>
       run(async () => {
@@ -330,7 +334,7 @@ function bucketTile(b) {
             ? `+${krR(b.monthly_amount)}/mån`
             : `av ${krR(s.periodTotal)}`;
   const level = s.balance < 0 ? "neg" : spending ? "" : s.ratio < 0.2 && !savings ? "low" : savings ? "saving" : "";
-  return `<a class="tile ${level}" href="#/hink/${b.id}" aria-label="${esc(b.name)}, ${krR(s.balance)} kvar">
+  return `<a class="tile ${level}" href="#/hink/${b.id}" data-id="${b.id}" draggable="false" aria-label="${esc(b.name)}, ${krR(s.balance)} kvar">
     <span class="tile-head"><span class="tile-icon">${bucketIcon(b.icon)}</span><span class="tile-name">${esc(b.name)}</span></span>
     <span class="tile-amount">${krR(s.balance)}</span>
     <span class="tile-sub${spending ? ` week${s.weekLeft < 0 ? " over" : ""}` : ""}">${sub}</span>
@@ -578,29 +582,16 @@ function viewTransfer() {
 function viewSettings() {
   const st = S.db.settings;
   const sumMonthly = activeBuckets().reduce((a, b) => a + b.monthly_amount, 0);
-  const ordered = orderedBuckets();
-  // Hinkar kan bara flyttas inom sin grupp, eftersom startsidan visar grupperna var för sig.
-  const sameGroup = (a, b) => a && b && (a.kind === "personal") === (b.kind === "personal");
   const conn = S.db.bank_connections[0];
   page({
     title: "Inställningar",
     body: `
       <h2 class="section">Hinkar <span class="muted">${kr(sumMonthly)}/mån</span></h2>
       <div class="card list">
-        ${ordered
-          .map(
-            (b, i) => `<div class="row sortable">
-              <a class="row-link" href="#/installningar/hink/${b.id}"><div class="bucket-icon">${bucketIcon(b.icon)}</div><div class="row-main"><div class="row-title">${esc(b.name)}</div><div class="row-sub">${[{ spending: "Löpande", savings: "Sparande och räkningar", personal: `Privat · ${esc(memberName(b.owner_id))}` }[b.kind], b.cap_amount != null ? `tak ${krR(b.cap_amount)}` : "", b.overflow_rank ? `överskott ${b.overflow_rank}` : ""].filter(Boolean).join(" · ")}</div></div><div class="row-amount">${kr(b.monthly_amount)}</div></a>
-              <div class="move">
-                <button class="icon-btn small" data-act="move" data-id="${b.id}" data-dir="-1" aria-label="Flytta upp" ${sameGroup(b, ordered[i - 1]) ? "" : "disabled"}>${icon("up")}</button>
-                <button class="icon-btn small" data-act="move" data-id="${b.id}" data-dir="1" aria-label="Flytta ner" ${sameGroup(b, ordered[i + 1]) ? "" : "disabled"}>${icon("down")}</button>
-              </div>
-            </div>`,
-          )
-          .join("")}
         <a class="row add" href="#/installningar/hink/ny">${icon("plus", 2)}Ny hink</a>
       </div>
-      <p class="muted small">När lönen kommer fylls hinkarna med sitt månadsbelopp i den här ordningen, aldrig över taket. Det som blir över går till hinkarna med överskott 1, sedan 2 och så vidare; samma nummer delar lika. De sista ${HOLD_DAYS} dagarna före lönedagen väntar fördelningen till nästa månad.</p>
+      <p class="muted small">Tryck på en hink på startsidan och välj Ändra för belopp och tak. Håll inne en hink för att ändra ordningen.</p>
+      <p class="muted small">När lönen kommer fylls hinkarna med sitt månadsbelopp uppifrån och ned inom varje grupp, de privata sist, och aldrig över taket. Det som blir över går till hinkarna med överskott 1, sedan 2 och så vidare; samma nummer delar lika. De sista ${HOLD_DAYS} dagarna före lönedagen väntar fördelningen till nästa månad.</p>
 
       <h2 class="section">Sortering och bank</h2>
       <div class="card list">
@@ -633,27 +624,6 @@ function viewSettings() {
   });
   pushStatus();
   S.handlers = {
-    // Visar den nya ordningen direkt och sparar sedan. Alla hinkar numreras om
-    // 0, 1, 2 … så att ordningen blir entydig även om flera hade samma nummer.
-    move: (el) =>
-      run(async () => {
-        const list = orderedBuckets();
-        const i = list.findIndex((b) => b.id === el.dataset.id);
-        const j = i + Number(el.dataset.dir);
-        if (!sameGroup(list[i], list[j])) return;
-        [list[i], list[j]] = [list[j], list[i]];
-        const changed = list.flatMap((b, n) => (b.sort_order === n ? [] : [[b, n]]));
-        for (const [b, n] of changed) b.sort_order = n;
-        const y = scrollY;
-        viewSettings();
-        scrollTo(0, y);
-        try {
-          await Promise.all(changed.map(([b, n]) => S.store.update("buckets", { id: b.id }, { sort_order: n })));
-        } catch (e) {
-          await refresh();
-          throw e;
-        }
-      }),
     budget: (f) =>
       run(async () => {
         const day = Number(f.get("day"));
@@ -1076,6 +1046,7 @@ function render() {
     const m = hash.match(re);
     if (m) {
       currentView = view;
+      if (view !== viewHome) setArranging(false);
       if (LIVE_VIEWS.includes(view)) listHash = hash || "#/";
       return view(...m.slice(1));
     }
@@ -1129,7 +1100,7 @@ function hidePull() {
 document.addEventListener(
   "touchstart",
   (e) => {
-    if (pullBusy || e.touches.length > 1 || window.scrollY > 0 || !LIVE_VIEWS.includes(currentView)) return;
+    if (pullBusy || arranging || e.touches.length > 1 || window.scrollY > 0 || !LIVE_VIEWS.includes(currentView)) return;
     pull = { x: e.touches[0].clientX, y: e.touches[0].clientY, dist: 0 };
     ptr.classList.remove("settle");
   },
@@ -1139,6 +1110,10 @@ document.addEventListener(
   "touchmove",
   (e) => {
     if (!pull) return;
+    if (drag) {
+      pull = null;
+      return hidePull();
+    }
     const dx = e.touches[0].clientX - pull.x;
     const dy = e.touches[0].clientY - pull.y;
     // Sidledes eller uppåt: vanlig scroll, inte uppdatering.
@@ -1169,6 +1144,155 @@ document.addEventListener("touchcancel", () => {
   pull = null;
   hidePull();
 });
+
+// --- Sortera hinkarna på startsidan -------------------------------------------
+// Håll inne en hink så börjar alla vicka, som apparna på iPhonens hemskärm.
+// Då kan de dras om inom sin grupp. Klar eller ett tryck bredvid avslutar.
+
+const LONG_PRESS_MS = 450;
+let arranging = false;
+let press = null; // { x, y, timer } medan fingret hålls still på en hink
+let drag = null; // { tile, list, dx, dy, x, y, start } medan en hink dras
+
+function setArranging(on) {
+  arranging = on;
+  app.classList.toggle("arranging", on);
+}
+
+/** Där hinken ligger i rutnätet, utan vickning och dragning. */
+function slot(el) {
+  const L = el.parentElement.getBoundingClientRect();
+  return { left: L.left + el.offsetLeft, top: L.top + el.offsetTop, right: L.left + el.offsetLeft + el.offsetWidth, bottom: L.top + el.offsetTop + el.offsetHeight };
+}
+
+function follow() {
+  const { tile, dx, dy, x, y } = drag;
+  const s = slot(tile);
+  tile.style.translate = `${x - dx - s.left}px ${y - dy - s.top}px`;
+}
+
+function beginDrag(tile, x, y) {
+  const r = tile.getBoundingClientRect();
+  const list = tile.parentElement;
+  drag = { tile, list, dx: x - r.left, dy: y - r.top, x, y, start: [...list.children].map((el) => el.dataset.id).join() };
+  tile.classList.add("dragging");
+  follow();
+}
+
+/** Flyttar den dragna hinken till over:s plats. De andra glider dit de hamnar. */
+function moveTo(over) {
+  const { tile, list } = drag;
+  const kids = [...list.children];
+  const was = new Map(kids.map((el) => [el, [el.offsetLeft, el.offsetTop]]));
+  const i = kids.indexOf(tile);
+  const j = kids.indexOf(over);
+  if (j > i) tile.before(...kids.slice(i + 1, j + 1));
+  else tile.after(...kids.slice(j, i));
+  for (const el of kids) {
+    if (el === tile) continue;
+    const [x0, y0] = was.get(el);
+    if (x0 === el.offsetLeft && y0 === el.offsetTop) continue;
+    el.style.transition = "none";
+    el.style.translate = `${x0 - el.offsetLeft}px ${y0 - el.offsetTop}px`;
+    el.offsetWidth; // tvingar fram läget innan den glider
+    el.style.transition = "";
+    el.style.translate = "";
+  }
+}
+
+/**
+ * Sparar gruppens nya ordning. Grupperna delar en ordning, den som lönen
+ * fördelas i, så gruppens hinkar byter bara plats med varandra och de andra
+ * gruppernas hinkar ligger kvar där de var.
+ */
+function saveOrder(list) {
+  const ids = [...list.children].map((el) => el.dataset.id);
+  const all = orderedBuckets();
+  const slots = all.flatMap((b, n) => (ids.includes(b.id) ? [n] : []));
+  ids.forEach((id, k) => (all[slots[k]] = bucketById(id)));
+  const changed = all.flatMap((b, n) => (b.sort_order === n ? [] : [[b, n]]));
+  for (const [b, n] of changed) b.sort_order = n;
+  return run(async () => {
+    try {
+      await Promise.all(changed.map(([b, n]) => S.store.update("buckets", { id: b.id }, { sort_order: n })));
+    } catch (e) {
+      await refresh();
+      throw e;
+    }
+  });
+}
+
+function endDrag() {
+  const { tile, list, start } = drag;
+  drag = null;
+  tile.classList.remove("dragging");
+  tile.style.translate = "";
+  if ([...list.children].map((el) => el.dataset.id).join() !== start) saveOrder(list);
+}
+
+/** Visar ny data i vyn, men inte mitt i en dragning. I vickläget stannar sidan där den var. */
+function liveRender() {
+  if (!LIVE_VIEWS.includes(currentView) || drag) return;
+  const y = scrollY;
+  render();
+  if (arranging) scrollTo(0, y);
+}
+
+function cancelPress() {
+  clearTimeout(press?.timer);
+  press = null;
+}
+
+app.addEventListener("pointerdown", (e) => {
+  const tile = e.target.closest(".tiles > .tile");
+  if (!tile || currentView !== viewHome || drag || e.button > 0) return;
+  if (arranging) return beginDrag(tile, e.clientX, e.clientY);
+  cancelPress();
+  press = {
+    x: e.clientX,
+    y: e.clientY,
+    timer: setTimeout(() => {
+      const { x, y } = press;
+      press = null;
+      setArranging(true);
+      navigator.vibrate?.(15);
+      beginDrag(tile, x, y);
+    }, LONG_PRESS_MS),
+  };
+});
+document.addEventListener("pointermove", (e) => {
+  if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 10) cancelPress();
+  if (!drag) return;
+  drag.x = e.clientX;
+  drag.y = e.clientY;
+  const over = [...drag.list.children].find((el) => {
+    if (el === drag.tile) return false;
+    const s = slot(el);
+    return drag.x >= s.left && drag.x < s.right && drag.y >= s.top && drag.y < s.bottom;
+  });
+  if (over) moveTo(over);
+  follow();
+});
+for (const type of ["pointerup", "pointercancel"]) {
+  document.addEventListener(type, () => {
+    cancelPress();
+    if (drag) endDrag();
+  });
+}
+// Hindrar att sidan scrollar medan en hink dras.
+document.addEventListener("touchmove", (e) => drag && e.preventDefault(), { passive: false });
+app.addEventListener("contextmenu", (e) => e.target.closest(".tiles > .tile") && e.preventDefault());
+// I vickläget öppnar ett tryck ingen hink; ett tryck bredvid avslutar.
+app.addEventListener(
+  "click",
+  (e) => {
+    if (!arranging || !e.target.closest("main")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (!e.target.closest(".tiles > .tile")) setArranging(false);
+  },
+  true,
+);
 
 /** Hämtar från banken när appen öppnas, om det var ett tag sedan. */
 async function autoSync() {
@@ -1207,7 +1331,7 @@ async function start() {
   await handleBankCallback();
   S.store.subscribe(async () => {
     await reload();
-    if (LIVE_VIEWS.includes(currentView)) render();
+    liveRender();
   });
   autoSync();
 }
@@ -1215,7 +1339,7 @@ async function start() {
 document.addEventListener("visibilitychange", async () => {
   if (document.visibilityState !== "visible" || !S.me) return;
   await reload();
-  if (LIVE_VIEWS.includes(currentView)) render();
+  liveRender();
   autoSync();
 });
 

@@ -145,11 +145,6 @@ main {
 .row + .row { border-top: 1px solid var(--line); }
 .row > .px:last-child { color: var(--muted); }
 .row.add { color: var(--accent); font-weight: 500; gap: 10px; }
-.row.sortable { padding-right: 4px; gap: 4px; }
-.row-link { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; color: inherit; }
-.move { display: flex; flex-direction: column; }
-.move .icon-btn { height: 26px; }
-.move .icon-btn:disabled { opacity: 0.25; cursor: default; }
 .row-main { flex: 1; min-width: 0; }
 .row-title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row-sub { font-size: 13px; color: var(--muted); margin-top: 1px; }
@@ -196,6 +191,21 @@ main {
 .cols-3 .tile-name { max-width: 100%; font-size: 13px; }
 .cols-3 .tile-amount { font-size: 16px; }
 .cols-3 .tile-sub { font-size: 11px; }
+
+/* Vickläget: håll inne en hink för att ändra ordningen */
+.tiles { position: relative; }
+.tile { position: relative; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.arranging .tile { touch-action: none; cursor: grab; animation: jiggle 0.28s ease-in-out infinite alternate; transition: translate 0.2s ease; }
+.arranging .tile:nth-child(2n) { animation-direction: alternate-reverse; animation-duration: 0.31s; }
+.arranging .tile:nth-child(3n) { animation-delay: -0.12s; }
+.arranging .tile:active { transform: none; }
+.tile.dragging { animation: none; scale: 1.08; z-index: 2; transition: none; cursor: grabbing; }
+@keyframes jiggle { from { rotate: -1.3deg; } to { rotate: 1.3deg; } }
+@media (prefers-reduced-motion: reduce) { .arranging .tile:not(.dragging) { animation: none; opacity: 0.8; } }
+.arrange-hint { display: none; text-align: center; margin: 8px 0 -4px; }
+.arranging .arrange-hint { display: block; }
+.arrange-done { display: none; width: 100%; height: 100%; border: 0; padding: 0; background: none; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; }
+.arranging .arrange-done { display: block; }
 .hero { text-align: center; padding: 22px 16px 18px; }
 .hero .label { color: var(--muted); font-size: 14px; }
 .huge { font-size: 38px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; margin: 2px 0 4px; }
