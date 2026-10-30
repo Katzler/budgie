@@ -7,7 +7,6 @@ import { HttpError, handle, json } from "../_shared/http.ts";
 import { check, loadState, serviceClient } from "../_shared/db.ts";
 import { computeBudget, formatKr, parseAmountToOre, todayInSweden, visibleTo } from "../_shared/budget.js";
 import { classify } from "../_shared/categorize.js";
-import { sendPush } from "../_shared/push.ts";
 
 async function sha256(text: string) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
@@ -54,12 +53,7 @@ Deno.serve(
         ? `💰 Att fördela: ${kr(budget.attFordela)}`
         : `📥 ${formatKr(amount)} osorterat – öppna Budgie och välj hink`;
 
-    // Den andra i hushållet får en notis; den som betalade ser svaret i genvägen.
-    const who = state.members.find((m: any) => m.user_id === saved.user_id)?.name ?? "";
-    const where = bucket ? `${bucket.icon} ${bucket.name}` : cls.kind === "income" ? "💰 Att fördela" : "📥 Osorterat";
-    const others = state.members.filter((m: any) => m.user_id !== saved.user_id && (!bucket || visibleTo(bucket, m.user_id))).map((m: any) => m.user_id);
-    if (others.length) await sendPush(db, { title: `${who}: ${merchant}`, body: `${formatKr(amount)} → ${where}`, url: `./#/tx/${row.id}`, tag: row.id }, { userIds: others });
-
+    // Bara den som betalade får svar (i genvägen); den andra ser köpet i appen utan notis.
     return json({ text, bucket: shown ? bucket.name : null, remaining });
   }),
 );
