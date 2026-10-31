@@ -250,12 +250,38 @@ function viewNotMember() {
   S.handlers = { logout: () => run(async () => (await S.store.signOut(), location.reload())) };
 }
 
+// Vilka grupper på hem som är öppna. Sparande och räkningar är stängd från början.
+const GROUP_KEY = "budgie-groups";
+const groupDefaults = { spending: true, personal: true, savings: false };
+let groupState = {};
+try {
+  groupState = JSON.parse(localStorage.getItem(GROUP_KEY)) || {};
+} catch {}
+const groupOpen = (key) => groupState[key] ?? groupDefaults[key] ?? true;
+app.addEventListener(
+  "toggle",
+  (e) => {
+    const key = e.target.dataset?.group;
+    if (!key) return;
+    groupState[key] = e.target.open;
+    try {
+      localStorage.setItem(GROUP_KEY, JSON.stringify(groupState));
+    } catch {}
+  },
+  true,
+);
+
 function viewHome() {
   const B = S.budget;
   const p = B.period;
   const daysLeft = daysBetween(today(), p.end) + 1;
-  const group = (title, list, cols) =>
-    list.length ? `<h2 class="section">${title}</h2><div class="tiles cols-${cols}">${list.map(bucketTile).join("")}</div>` : "";
+  const group = (key, title, list, cols) =>
+    list.length
+      ? `<details class="group" data-group="${key}" ${groupOpen(key) ? "open" : ""}>
+          <summary class="section"><span>${title} <span class="chev" aria-hidden="true">›</span></span></summary>
+          <div class="tiles cols-${cols}">${list.map(bucketTile).join("")}</div>
+        </details>`
+      : "";
   const buckets = myBuckets();
   const conns = S.db.bank_connections.filter((c) => c.enabled);
   const lastSync = conns.map((c) => c.last_sync_at).filter(Boolean).sort().pop();
@@ -285,9 +311,9 @@ function viewHome() {
           : ""
       }
       ${B.uncategorizedCount ? `<a class="card notice" href="#/transaktioner">${px("inbox", 2)}<span class="grow">${B.uncategorizedCount} köp att sortera (${krR(B.uncategorized)})</span>${icon("next", 2)}</a>` : ""}
-      ${group("Löpande", buckets.filter((b) => b.kind === "spending"), 2)}
-      ${group("Egna", buckets.filter((b) => b.kind === "personal"), 2)}
-      ${group("Sparande och räkningar", buckets.filter((b) => b.kind === "savings"), 3)}
+      ${group("spending", "Löpande", buckets.filter((b) => b.kind === "spending"), 2)}
+      ${group("personal", "Egna", buckets.filter((b) => b.kind === "personal"), 2)}
+      ${group("savings", "Sparande och räkningar", buckets.filter((b) => b.kind === "savings"), 3)}
       <p class="footer-note muted small">
         ${
           diff == null
