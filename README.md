@@ -8,6 +8,7 @@ En hinkbudget för er två. Lönen kommer in på ett gemensamt Swedbank-konto oc
 - **Notis efter varje köp**, t.ex. "ICA Maxi −342 kr · 🛒 Livsmedel: 2 158 kr kvar".
 - **Överskott rullar vidare** och överdrag dras av nästa månad. Budgetmånaden börjar på lönedagen (den 25:e).
 - **Apple Pay-genväg (valfri)** som ger besked direkt när ni betalar med telefonen.
+- **Quests**: uppdrag som ger pengar till den egna hinken, t.ex. att läsa varje dag eller gå 10 000 steg.
 
 Allt ryms i gratisnivåerna hos GitHub, Supabase och Enable Banking.
 
@@ -136,6 +137,8 @@ Lön och flyttar till och från sparkonton är *inkomster*: de påverkar Att fö
 
 **Egna pengar:** en privat hink med ägare syns bara för ägaren. Den andra ser inte hinken, köpen i den, flyttarna till och från den eller reglerna som sorterar dit, och får inga notiser om den. Hinken räknas ändå med i Att fördela och kontrollsumman, och månadsbeloppet syns under Inställningar eftersom det är en del av den gemensamma planen. Att sortera ett köp till en privat hink sparar ingen regel, så att den andras köp i samma butik inte hamnar där. Det döljs i appen, inte i databasen, och kontot är gemensamt, så köpen syns fortfarande i Swedbanks app.
 
+**Quests:** varje person har egna uppdrag under fliken Quests. *Streak*-quests bockas i varje dag (bara idag eller igår går att bocka i), och var 7:e dag i rad ger en belöning. En missad dag nollställer sviten. *Cooldown*-quests gäller på hedersord och kan tas en gång per 7 dagar. Pengarna flyttas från hinken i `settings.quest_bucket_id` till ägarens privata hink. Det sker i databasfunktionen `claim_quest`, som kontrollerar ägare, svit, väntetid och saldo, så att ingen kan ta pengar till någon annans hink eller ta samma belöning två gånger. Den andra ser framstegen men inte hinken. Quests läggs till med SQL i tabellen `quests` (se [005_quests.sql](supabase/migrations/005_quests.sql)).
+
 **Avstängda konton:** rader från ett bankkonto som är avstängt under Inställningar → Bankkoppling räknas inte med och visas inte. Slås kontot på igen kommer de tillbaka.
 
 ## Filer
@@ -144,6 +147,7 @@ Lön och flyttar till och från sparkonton är *inkomster*: de påverkar Att fö
 index.html, css/, js/              Webbappen (ren HTML/JS, inget byggsteg)
   js/app.js                        Vyer och router
   js/store.js                      Datalager: Supabase eller demoläge
+  js/quests.js                     Svitar och väntetid för Quests
 supabase/functions/_shared/        Kod som delas mellan app och server
   budget.js                        Lönemånad, saldon, fördelning, belopp
   categorize.js                    Regler och matchning

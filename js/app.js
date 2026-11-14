@@ -16,6 +16,7 @@ import {
 } from "../supabase/functions/_shared/budget.js";
 import { matchRule, suggestPattern, defaultRulesFor } from "../supabase/functions/_shared/categorize.js";
 import { px, spriteFor, PIXEL_EMOJIS } from "./pixel.js";
+import { addDays, dayLocked, questStatus } from "./quests.js";
 
 const app = document.getElementById("app");
 const S = { store: null, session: null, db: null, me: null, hidden: new Set(), budget: null, handlers: {} };
@@ -89,6 +90,8 @@ const orderedBuckets = () => priorityOrder(S.db.buckets);
 const bucketById = (id) => S.db.buckets.find((b) => b.id === id);
 const memberName = (id) => S.db.members.find((m) => m.user_id === id)?.name ?? "";
 const inBudget = (t) => !S.db.settings.start_date || t.date >= S.db.settings.start_date;
+const questsOf = (userId) => S.db.quests.filter((q) => q.owner_id === userId && !q.archived).sort((a, b) => a.sort_order - b.sort_order);
+const questState = (q) => questStatus(q, S.db.quest_checks, S.db.quest_claims, today());
 
 // --- Data ---------------------------------------------------------------------
 
@@ -159,6 +162,7 @@ function page({ title, back, action = "", body, tabs = true }) {
     return `<a href="${href}" class="tab${active ? " active" : ""}" aria-label="${label}">${icon(name)}<span>${label}</span>${badge ? `<b class="badge">${badge}</b>` : ""}</a>`;
   };
   const count = S.budget?.uncategorizedCount ?? 0;
+  const ready = S.me && S.db?.quests ? questsOf(S.me.user_id).filter((q) => questState(q).amount > 0).length : 0;
   app.innerHTML = `
     ${S.store.demo ? '<div class="demo-banner">Demoläge – påhittad data. <a href="#/installningar">Mer info</a></div>' : ""}
     <header class="topbar">
@@ -172,6 +176,7 @@ function page({ title, back, action = "", body, tabs = true }) {
         ? `<nav class="tabbar">
         ${tab("#/", "home", "Hem")}
         ${tab("#/transaktioner", "list", "Transaktioner", count)}
+        ${tab("#/quests", "quest", "Quests", ready)}
         ${tab("#/installningar", "gear", "Inställningar")}
       </nav>`
         : ""
@@ -459,8 +464,11 @@ function viewBucket(id) {
       const out = t.from_bucket === id;
       const other = out ? t.to_bucket : t.from_bucket;
       const otherName = other ? bucketById(other)?.name : "Att fördela";
-      return `<div class="row"><div class="row-main"><div class="row-title">${out ? "Till" : "Från"} ${esc(otherName)}</div>
-        <div class="row-sub">${relDate(t.created_at.slice(0, 10))}${t.created_by ? ` · ${esc(memberName(t.created_by))}` : ""}${t.note ? ` · ${esc(t.note)}` : ""}</div></div>
+      // Från en hink jag inte ser, t.ex. en quest-belöning: visa anteckningen i stället för hinken.
+      const title = hiddenBucket(other) ? esc(t.note || "Privat hink") : `${out ? "Till" : "Från"} ${esc(otherName)}`;
+      const note = t.note && !hiddenBucket(other) ? ` · ${esc(t.note)}` : "";
+      return `<div class="row"><div class="row-main"><div class="row-title">${title}</div>
+        <div class="row-sub">${relDate(t.created_at.slice(0, 10))}${t.created_by ? ` · ${esc(memberName(t.created_by))}` : ""}${note}</div></div>
         <div class="row-amount ${out ? "" : "pos"}">${kr(out ? -t.amount : t.amount, { sign: true })}</div></div>`;
     });
 
@@ -600,6 +608,115 @@ function viewTransfer() {
       run(async () => {
         if (!confirm("Ångra flytten?")) return;
         await S.store.remove("transfers", { id: el.dataset.id });
+        await refresh();
+      }),
+  };
+}
+
+// --- Quests -------------------------------------------------------------------
+
+const dayCount = (n) => `${n} ${n === 1 ? "dag" : "dagar"}`;
+const weekday = (iso) => parseISODate(iso).toLocaleDateString("sv-SE", { weekday: "short" }).replace(".", "");
+
+function questCard(q) {
+  const s = questState(q);
+  const head = `<div class="quest-head">
+      <span class="quest-icon">${bucketIcon(q.icon, 3)}</span>
+      <div class="grow"><div class="row-title">${esc(q.title)}</div>${q.description ? `<div class="row-sub">${esc(q.description)}</div>` : ""}</div>
+      <span class="quest-reward">${krR(q.reward_amount)}</span>
+    </div>`;
+  if (q.kind === "cooldown") {
+    return `<div class="card quest${s.ready ? " ready" : ""}">${head}
+      <button class="btn ${s.ready ? "primary" : ""} full" data-act="claim" data-id="${q.id}" ${s.ready ? "" : "disabled"}>Ta ${krR(q.reward_amount)}</button>
+      ${s.ready ? "" : `<p class="muted small quest-note">Nya pengar kan tas om ${dayCount(s.daysLeft)} (${weekday(s.nextDay)} ${shortDate(s.nextDay)}).</p>`}
+    </div>`;
+  }
+  const t = today();
+  const yesterday = addDays(t, -1);
+  const dayBtn = (day, label, done) => {
+    const locked = done && dayLocked(q, S.db.quest_claims, day);
+    return `<button type="button" class="day-toggle${done ? " done" : ""}" data-act="check" data-id="${q.id}" data-day="${day}" data-done="${done ? 0 : 1}" ${locked ? "disabled" : ""} aria-pressed="${done}">
+      <span class="box">${done ? icon("check", 2) : ""}</span>${label}</button>`;
+  };
+  const status = s.amount
+    ? `Bra jobbat! ${s.claimable.length > 1 ? `${s.claimable.length} belöningar väntar` : "Belöningen väntar"}.`
+    : s.length && !s.checkedToday
+      ? "Bocka i idag, annars börjar sviten om från noll."
+      : s.length
+        ? `${dayCount(s.target - s.length)} kvar till nästa belöning.`
+        : `${dayCount(q.every_days)} i rad ger ${krR(q.reward_amount)}.`;
+  return `<div class="card quest${s.amount ? " ready" : ""}">${head}
+    <div class="quest-progress" aria-label="${s.length} av ${s.target} dagar">
+      <div class="segments">${Array.from({ length: q.every_days }, (_, i) => `<span class="${i < s.inBlock ? "on" : ""}"></span>`).join("")}</div>
+      <b>${s.length}/${s.target}</b>
+    </div>
+    <p class="muted small quest-note">${status}</p>
+    <div class="day-toggles">${dayBtn(yesterday, "Igår", s.checkedYesterday)}${dayBtn(t, "Idag", s.checkedToday)}</div>
+    ${s.amount ? `<button class="btn primary full" data-act="claim" data-id="${q.id}">Ta ${krR(s.amount)}</button>` : ""}
+  </div>`;
+}
+
+/** En rad om den andras quest: bara framstegen, aldrig hinken. */
+function questProgressRow(q) {
+  const s = questState(q);
+  const sub =
+    q.kind === "cooldown"
+      ? s.ready
+        ? "Kan ta pengar nu"
+        : `Kan ta pengar om ${dayCount(s.daysLeft)}`
+      : `${s.length}/${s.target} dagar · ${s.checkedToday ? "✓ idag" : "inte idag än"}`;
+  return `<div class="row"><span class="bucket-icon">${bucketIcon(q.icon)}</span><div class="row-main"><div class="row-title">${esc(q.title)}</div><div class="row-sub">${sub}</div></div></div>`;
+}
+
+function viewQuests() {
+  const start = S.budget.period.start;
+  const earned = (userId) => S.db.quest_claims.filter((c) => c.owner_id === userId && c.day >= start).reduce((a, c) => a + c.amount, 0);
+  const mine = questsOf(S.me.user_id);
+  const others = S.db.members.filter((m) => m.user_id !== S.me.user_id && questsOf(m.user_id).length);
+  const pot = S.db.settings.quest_bucket_id;
+  const history = S.db.quest_claims
+    .filter((c) => c.owner_id === S.me.user_id)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .slice(0, 5);
+  const questTitle = (id) => S.db.quests.find((q) => q.id === id)?.title ?? "Quest";
+  page({
+    title: `${px("trophy", 2, "px art")}Quests`,
+    body: `
+      <p class="period muted">Den här månaden har du tagit ${krR(earned(S.me.user_id))}</p>
+      ${mine.map(questCard).join("") || `<div class="empty">${px("trophy", 4, "px art")}<p>Du har inga quests än.</p></div>`}
+      ${others
+        .map(
+          (m) => `<h2 class="section">${esc(m.name)} <span class="muted">${krR(earned(m.user_id))} den här månaden</span></h2>
+            <div class="card list">${questsOf(m.user_id).map(questProgressRow).join("")}</div>`,
+        )
+        .join("")}
+      ${
+        history.length
+          ? `<h2 class="section">Senast tagna</h2><div class="card list">${history
+              .map(
+                (c) => `<div class="row"><div class="row-main"><div class="row-title">${esc(questTitle(c.quest_id))}</div><div class="row-sub">${relDate(c.day)}${c.milestone ? ` · ${c.milestone} dagar i rad` : ""}</div></div><div class="row-amount pos">${kr(c.amount, { sign: true })}</div></div>`,
+              )
+              .join("")}</div>`
+          : ""
+      }
+      ${pot && !hiddenBucket(pot) && S.budget.buckets.has(pot) ? `<p class="footer-note muted small">Kvar i Quests-hinken: ${krR(S.budget.buckets.get(pot).balance)}</p>` : ""}`,
+  });
+  S.handlers = {
+    check: (el) =>
+      run(async () => {
+        const q = S.db.quests.find((x) => x.id === el.dataset.id);
+        const before = questState(q).amount;
+        await S.store.rpc("set_quest_check", { p_quest: q.id, p_day: el.dataset.day, p_done: el.dataset.done === "1" });
+        await refresh();
+        const after = questState(q);
+        if (after.amount > before) toast(`🎉 ${after.length} dagar i rad! Ta dina ${formatKr(after.amount, { decimals: "never" })}.`);
+      }),
+    claim: (el) =>
+      run(async () => {
+        const q = S.db.quests.find((x) => x.id === el.dataset.id);
+        if (q.kind === "cooldown" && !confirm(`${q.title}\n${q.description || ""}\n\nStämmer det?`)) return;
+        const r = await S.store.rpc("claim_quest", { p_quest: q.id });
+        toast(`🎉 ${formatKr(r.amount, { decimals: "never" })} till ${r.bucket}`);
         await refresh();
       }),
   };
@@ -1048,6 +1165,7 @@ const routes = [
   [/^#\/hink\/([^/]+)$/, viewBucket],
   [/^#\/tx\/([^/]+)$/, viewTx],
   [/^#\/flytta$/, viewTransfer],
+  [/^#\/quests$/, viewQuests],
   [/^#\/installningar$/, viewSettings],
   [/^#\/installningar\/hink\/([^/]+)$/, viewBucketEdit],
   [/^#\/installningar\/regler$/, viewRules],
@@ -1055,7 +1173,7 @@ const routes = [
   [/^#\/installningar\/genvag$/, viewShortcut],
   [/^#\/kom-igang$/, viewSetup],
 ];
-const LIVE_VIEWS = [viewHome, viewTransactions, viewBucket];
+const LIVE_VIEWS = [viewHome, viewTransactions, viewBucket, viewQuests];
 let currentView = null;
 /** Listan man senast tittade på, dit köpvyn går tillbaka. */
 let listHash = "#/";

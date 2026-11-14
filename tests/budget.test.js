@@ -11,6 +11,7 @@ import {
   visibleTo,
 } from "../supabase/functions/_shared/budget.js";
 import { classify, matchRule, suggestPattern, findMatchForBooked, defaultRulesFor } from "../supabase/functions/_shared/categorize.js";
+import { runsOf, streakStatus, cooldownStatus, planClaim, dayLocked } from "../js/quests.js";
 
 export const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
@@ -384,4 +385,73 @@ test("rader från avstängda bankkonton räknas inte", () => {
   ];
   eq(activeTransactions(txs, conns).map((t) => t.id).join(","), "a,c");
   eq(activeTransactions(txs, []).length, 3);
+});
+
+// --- Quests --------------------------------------------------------------
+
+const bible = { id: "q1", kind: "streak", every_days: 7, reward_amount: 12500 };
+const steps = { id: "q2", kind: "cooldown", every_days: 7, reward_amount: 10000 };
+const checksFor = (...days) => days.map((day) => ({ quest_id: "q1", day }));
+const range = (from, n) => Array.from({ length: n }, (_, i) => {
+  const d = new Date(from + "T12:00:00");
+  d.setDate(d.getDate() + i);
+  return d.toLocaleDateString("sv-SE");
+});
+
+test("dagar i följd blir svitar, även över månadsskiftet", () => {
+  eq(runsOf(["2026-11-02", "2026-10-31", "2026-11-01", "2026-11-04"]).map((r) => [r.start, r.length]), [
+    ["2026-10-31", 3],
+    ["2026-11-04", 1],
+  ]);
+});
+
+test("sviten lever om igår är ibockat men inte idag", () => {
+  const s = streakStatus(bible, checksFor(...range("2026-11-10", 4)), [], "2026-11-14");
+  eq([s.length, s.target, s.inBlock, s.checkedToday, s.checkedYesterday], [4, 7, 4, false, true]);
+});
+
+test("en missad dag nollställer sviten", () => {
+  const s = streakStatus(bible, checksFor(...range("2026-11-08", 5)), [], "2026-11-14");
+  eq([s.length, s.target, s.claimable.length], [0, 7, 0]);
+});
+
+test("sjunde dagen ger en belöning, sedan räknas mot 14", () => {
+  const checks = checksFor(...range("2026-11-08", 7));
+  const before = streakStatus(bible, checks, [], "2026-11-14");
+  eq([before.length, before.target, before.inBlock, before.amount], [7, 7, 7, 12500]);
+  const claims = [{ quest_id: "q1", run_start: "2026-11-08", milestone: 7, day: "2026-11-14" }];
+  const after = streakStatus(bible, checks, claims, "2026-11-14");
+  eq([after.length, after.target, after.inBlock, after.amount], [7, 14, 0, 0]);
+});
+
+test("intjänad belöning finns kvar fast sviten bryts", () => {
+  const s = streakStatus(bible, checksFor(...range("2026-11-01", 9)), [], "2026-11-14");
+  eq([s.length, s.claimable, s.amount], [0, [{ run_start: "2026-11-01", milestone: 7 }], 12500]);
+});
+
+test("två ej tagna belöningar i samma svit tas tillsammans", () => {
+  const plan = planClaim(bible, checksFor(...range("2026-11-01", 14)), [], "2026-11-14");
+  eq(plan.amount, 25000);
+  eq(plan.rows.map((r) => r.milestone), [7, 14]);
+});
+
+test("dagar som ingår i en tagen belöning går inte att bocka ur", () => {
+  const claims = [{ quest_id: "q1", run_start: "2026-11-08", milestone: 7 }];
+  eq(dayLocked(bible, claims, "2026-11-14"), true);
+  eq(dayLocked(bible, claims, "2026-11-15"), false);
+});
+
+test("stegen kan tas igen sju dagar efter förra gången", () => {
+  eq(cooldownStatus(steps, [], "2026-11-14").ready, true);
+  const claims = [{ quest_id: "q2", day: "2026-11-14" }];
+  const s = cooldownStatus(steps, claims, "2026-11-16");
+  eq([s.ready, s.daysLeft, s.nextDay], [false, 5, "2026-11-21"]);
+  eq(cooldownStatus(steps, claims, "2026-11-21").ready, true);
+  let error = "";
+  try {
+    planClaim(steps, [], claims, "2026-11-20");
+  } catch (e) {
+    error = e.message;
+  }
+  eq(error, "Nya pengar kan tas om 1 dag");
 });

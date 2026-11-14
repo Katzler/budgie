@@ -33,6 +33,7 @@ export function demoSeed() {
     ["Buffert", "🛟", "savings", null, 1000000],
     ["Jacks pengar", "🧢", "personal", "u-jack", 150000],
     ["Partners pengar", "👜", "personal", "u-partner", 150000],
+    ["Quests", "🏆", "personal", "u-jack", 200000],
   ];
   const buckets = bucketDefs.map(([name, icon, kind, owner_id, monthly_amount], i) => ({
     id: id("b"),
@@ -102,9 +103,17 @@ export function demoSeed() {
   const rules = defaultRulesFor(buckets).map((r) => ({ id: id("r"), ...r }));
   rules.push({ id: id("r"), pattern: "brf eskilstunan", kind: "expense", bucket_id: B["Räkningar"] });
 
+  const quests = members.flatMap((m, i) => [
+    { id: id("q"), owner_id: m.user_id, title: "Läst Bibeln", icon: "📖", description: "Läs varje dag. 7 dagar i rad ger pengar.", kind: "streak", reward_amount: 12500, every_days: 7, sort_order: 0, archived: false },
+    { id: id("q"), owner_id: m.user_id, title: "10 000 steg", icon: "👟", description: "Snitt på minst 10 000 steg de senaste 7 dagarna i Hälsa.", kind: "cooldown", reward_amount: 10000, every_days: 7, sort_order: 1, archived: false },
+  ]);
+  const checkDays = (quest, ...ago) => ago.map((n) => ({ quest_id: quest.id, day: daysAgo(n), created_at: `${daysAgo(n)}T20:00:00.000Z` }));
+  const quest_checks = [...checkDays(quests[0], 1, 2, 3, 4, 5), ...checkDays(quests[2], 0, 1, 2)];
+  const quest_claims = [{ id: id("c"), quest_id: quests[3].id, owner_id: "u-partner", day: daysAgo(3), run_start: null, milestone: null, amount: 10000, transfer_id: null, created_at: `${daysAgo(3)}T19:00:00.000Z` }];
+
   return {
     members,
-    settings: { id: 1, period_start_day: startDay, start_date: previousStart, start_balance: 1250000 },
+    settings: { id: 1, period_start_day: startDay, start_date: previousStart, start_balance: 1250000, quest_bucket_id: B["Quests"] },
     buckets,
     allocations,
     transfers: [{ id: id("f"), from_bucket: B["Lyx"], to_bucket: B["Livsmedel"], amount: 50000, note: "Middagsbjudning", created_by: "u-jack", created_at: `${previousStart}T18:00:00.000Z` }],
@@ -113,5 +122,8 @@ export function demoSeed() {
     bank_connections: [],
     quick_tokens: [],
     push_subscriptions: [],
+    quests,
+    quest_checks,
+    quest_claims,
   };
 }
