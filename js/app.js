@@ -16,7 +16,7 @@ import {
 } from "../supabase/functions/_shared/budget.js";
 import { matchRule, suggestPattern, defaultRulesFor } from "../supabase/functions/_shared/categorize.js";
 import { px, spriteFor, PIXEL_EMOJIS } from "./pixel.js";
-import { addDays, dayLocked, questStatus } from "./quests.js";
+import { dayLocked, questStatus } from "./quests.js";
 
 const app = document.getElementById("app");
 const S = { store: null, session: null, db: null, me: null, hidden: new Set(), budget: null, handlers: {} };
@@ -632,7 +632,6 @@ function questCard(q) {
     </div>`;
   }
   const t = today();
-  const yesterday = addDays(t, -1);
   const dayBtn = (day, label, done) => {
     const locked = done && dayLocked(q, S.db.quest_claims, day);
     return `<button type="button" class="day-toggle${done ? " done" : ""}" data-act="check" data-id="${q.id}" data-day="${day}" data-done="${done ? 0 : 1}" ${locked ? "disabled" : ""} aria-pressed="${done}">
@@ -644,35 +643,22 @@ function questCard(q) {
       ? "Bocka i idag, annars börjar sviten om från noll."
       : s.length
         ? `${dayCount(s.target - s.length)} kvar till nästa belöning.`
-        : `${dayCount(q.every_days)} i rad ger ${krR(q.reward_amount)}.`;
+        : "";
   return `<div class="card quest${s.amount ? " ready" : ""}">${head}
     <div class="quest-progress" aria-label="${s.length} av ${s.target} dagar">
       <div class="segments">${Array.from({ length: q.every_days }, (_, i) => `<span class="${i < s.inBlock ? "on" : ""}"></span>`).join("")}</div>
       <b>${s.length}/${s.target}</b>
     </div>
-    <p class="muted small quest-note">${status}</p>
-    <div class="day-toggles">${dayBtn(yesterday, "Igår", s.checkedYesterday)}${dayBtn(t, "Idag", s.checkedToday)}</div>
+    ${status ? `<p class="muted small quest-note">${status}</p>` : ""}
+    <div class="day-toggles">${dayBtn(t, "Idag", s.checkedToday)}</div>
     ${s.amount ? `<button class="btn primary full" data-act="claim" data-id="${q.id}">Ta ${krR(s.amount)}</button>` : ""}
   </div>`;
-}
-
-/** En rad om den andras quest: bara framstegen, aldrig hinken. */
-function questProgressRow(q) {
-  const s = questState(q);
-  const sub =
-    q.kind === "cooldown"
-      ? s.ready
-        ? "Kan ta pengar nu"
-        : `Kan ta pengar om ${dayCount(s.daysLeft)}`
-      : `${s.length}/${s.target} dagar · ${s.checkedToday ? "✓ idag" : "inte idag än"}`;
-  return `<div class="row"><span class="bucket-icon">${bucketIcon(q.icon)}</span><div class="row-main"><div class="row-title">${esc(q.title)}</div><div class="row-sub">${sub}</div></div></div>`;
 }
 
 function viewQuests() {
   const start = S.budget.period.start;
   const earned = (userId) => S.db.quest_claims.filter((c) => c.owner_id === userId && c.day >= start).reduce((a, c) => a + c.amount, 0);
   const mine = questsOf(S.me.user_id);
-  const others = S.db.members.filter((m) => m.user_id !== S.me.user_id && questsOf(m.user_id).length);
   const pot = S.db.settings.quest_bucket_id;
   const history = S.db.quest_claims
     .filter((c) => c.owner_id === S.me.user_id)
@@ -684,12 +670,6 @@ function viewQuests() {
     body: `
       <p class="period muted">Den här månaden har du tagit ${krR(earned(S.me.user_id))}</p>
       ${mine.map(questCard).join("") || `<div class="empty">${px("trophy", 4, "px art")}<p>Du har inga quests än.</p></div>`}
-      ${others
-        .map(
-          (m) => `<h2 class="section">${esc(m.name)} <span class="muted">${krR(earned(m.user_id))} den här månaden</span></h2>
-            <div class="card list">${questsOf(m.user_id).map(questProgressRow).join("")}</div>`,
-        )
-        .join("")}
       ${
         history.length
           ? `<h2 class="section">Senast tagna</h2><div class="card list">${history

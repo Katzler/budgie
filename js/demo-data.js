@@ -104,7 +104,7 @@ export function demoSeed() {
   rules.push({ id: id("r"), pattern: "brf eskilstunan", kind: "expense", bucket_id: B["Räkningar"] });
 
   const quests = members.flatMap((m, i) => [
-    { id: id("q"), owner_id: m.user_id, title: "Läst Bibeln", icon: "📖", description: "Läs varje dag. 7 dagar i rad ger pengar.", kind: "streak", reward_amount: 12500, every_days: 7, sort_order: 0, archived: false },
+    { id: id("q"), owner_id: m.user_id, title: "Läst Bibeln", icon: "📖", description: null, kind: "streak", reward_amount: 12500, every_days: 7, sort_order: 0, archived: false },
     { id: id("q"), owner_id: m.user_id, title: "10 000 steg", icon: "👟", description: "Snitt på minst 10 000 steg de senaste 7 dagarna i Hälsa.", kind: "cooldown", reward_amount: 10000, every_days: 7, sort_order: 1, archived: false },
   ]);
   const checkDays = (quest, ...ago) => ago.map((n) => ({ quest_id: quest.id, day: daysAgo(n), created_at: `${daysAgo(n)}T20:00:00.000Z` }));
