@@ -659,7 +659,6 @@ function viewQuests() {
   const start = S.budget.period.start;
   const earned = (userId) => S.db.quest_claims.filter((c) => c.owner_id === userId && c.day >= start).reduce((a, c) => a + c.amount, 0);
   const mine = questsOf(S.me.user_id);
-  const pot = S.db.settings.quest_bucket_id;
   const history = S.db.quest_claims
     .filter((c) => c.owner_id === S.me.user_id)
     .sort((a, b) => b.created_at.localeCompare(a.created_at))
@@ -678,8 +677,7 @@ function viewQuests() {
               )
               .join("")}</div>`
           : ""
-      }
-      ${pot && !hiddenBucket(pot) && S.budget.buckets.has(pot) ? `<p class="footer-note muted small">Kvar i Quests-hinken: ${krR(S.budget.buckets.get(pot).balance)}</p>` : ""}`,
+      }`,
   });
   S.handlers = {
     check: (el) =>
