@@ -16,7 +16,7 @@ import {
 } from "../supabase/functions/_shared/budget.js";
 import { matchRule, suggestPattern, defaultRulesFor } from "../supabase/functions/_shared/categorize.js";
 import { px, spriteFor, PIXEL_EMOJIS } from "./pixel.js";
-import { dayLocked, questStatus } from "./quests.js";
+import { addDays, dayLocked, questStatus } from "./quests.js";
 
 const app = document.getElementById("app");
 const S = { store: null, session: null, db: null, me: null, hidden: new Set(), budget: null, handlers: {} };
@@ -632,6 +632,7 @@ function questCard(q) {
     </div>`;
   }
   const t = today();
+  const yesterday = addDays(t, -1);
   const dayBtn = (day, label, done) => {
     const locked = done && dayLocked(q, S.db.quest_claims, day);
     return `<button type="button" class="day-toggle${done ? " done" : ""}" data-act="check" data-id="${q.id}" data-day="${day}" data-done="${done ? 0 : 1}" ${locked ? "disabled" : ""} aria-pressed="${done}">
@@ -650,7 +651,7 @@ function questCard(q) {
       <b>${s.length}/${s.target}</b>
     </div>
     ${status ? `<p class="muted small quest-note">${status}</p>` : ""}
-    <div class="day-toggles">${dayBtn(t, "Idag", s.checkedToday)}</div>
+    <div class="day-toggles">${dayBtn(yesterday, "Igår", s.checkedYesterday)}${dayBtn(t, "Idag", s.checkedToday)}</div>
     ${s.amount ? `<button class="btn primary full" data-act="claim" data-id="${q.id}">Ta ${krR(s.amount)}</button>` : ""}
   </div>`;
 }
