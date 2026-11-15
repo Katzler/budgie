@@ -1,6 +1,6 @@
 // Service worker: tar emot push-notiser och cachar appens filer så att den
 // startar snabbt. Data hämtas alltid färskt från Supabase.
-const CACHE = "budgie-v4";
+const CACHE = "budgie-v5";
 const SHELL = [
   "./",
   "index.html",
@@ -11,6 +11,7 @@ const SHELL = [
   "js/demo-data.js",
   "js/pixel.js",
   "js/quests.js",
+  "js/confetti.js",
   "supabase/functions/_shared/budget.js",
   "supabase/functions/_shared/categorize.js",
   "manifest.webmanifest",

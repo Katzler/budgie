@@ -351,7 +351,14 @@ const EMOJI = {
 };
 export const PIXEL_EMOJIS = Object.keys(EMOJI).filter((e) => !["🚌", "🦜", "🐦"].includes(e));
 
-export const SPRITES = { ...UI, ...ART };
+// Små bitar till penga-konfettin.
+const CONFETTI = {
+  note: ["kkkkkkkkk", "kgGgggGgk", "kGgwwwgGk", "kgGgggGgk", "kkkkkkkkk"],
+  note2: ["kkkkkkkkk", "kbBbbbBbk", "kBbwwwbBk", "kbBbbbBbk", "kkkkkkkkk"],
+  dot: [".kkk.", "kyyyk", "kywok", "kyook", ".kkk."],
+};
+
+export const SPRITES = { ...UI, ...ART, ...CONFETTI };
 export const PALETTE = COLORS;
 
 /** SVG-sträng för en ikon. Varje färg blir en path, så att DOM:en förblir liten. */

@@ -148,6 +148,7 @@ index.html, css/, js/              Webbappen (ren HTML/JS, inget byggsteg)
   js/app.js                        Vyer och router
   js/store.js                      Datalager: Supabase eller demoläge
   js/quests.js                     Svitar och väntetid för Quests
+  js/confetti.js                   Penga-konfetti när man bockar i eller tar ett quest
 supabase/functions/_shared/        Kod som delas mellan app och server
   budget.js                        Lönemånad, saldon, fördelning, belopp
   categorize.js                    Regler och matchning

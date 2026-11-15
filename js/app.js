@@ -17,6 +17,7 @@ import {
 import { matchRule, suggestPattern, defaultRulesFor } from "../supabase/functions/_shared/categorize.js";
 import { px, spriteFor, PIXEL_EMOJIS } from "./pixel.js";
 import { dayLocked, questStatus } from "./quests.js";
+import { moneyConfetti } from "./confetti.js";
 
 const app = document.getElementById("app");
 const S = { store: null, session: null, db: null, me: null, hidden: new Set(), budget: null, handlers: {} };
@@ -684,7 +685,10 @@ function viewQuests() {
       run(async () => {
         const q = S.db.quests.find((x) => x.id === el.dataset.id);
         const before = questState(q).amount;
-        await S.store.rpc("set_quest_check", { p_quest: q.id, p_day: el.dataset.day, p_done: el.dataset.done === "1" });
+        const checking = el.dataset.done === "1";
+        const rect = el.getBoundingClientRect();
+        await S.store.rpc("set_quest_check", { p_quest: q.id, p_day: el.dataset.day, p_done: checking });
+        if (checking) moneyConfetti(rect);
         await refresh();
         const after = questState(q);
         if (after.amount > before) toast(`🎉 ${after.length} dagar i rad! Ta dina ${formatKr(after.amount, { decimals: "never" })}.`);
@@ -693,7 +697,9 @@ function viewQuests() {
       run(async () => {
         const q = S.db.quests.find((x) => x.id === el.dataset.id);
         if (q.kind === "cooldown" && !confirm(`${q.title}\n${q.description || ""}\n\nStämmer det?`)) return;
+        const rect = el.getBoundingClientRect();
         const r = await S.store.rpc("claim_quest", { p_quest: q.id });
+        moneyConfetti(rect, 40);
         toast(`🎉 ${formatKr(r.amount, { decimals: "never" })} till ${r.bucket}`);
         await refresh();
       }),

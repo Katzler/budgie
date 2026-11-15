@@ -339,6 +339,10 @@ body.busy .btn { opacity: 0.6; pointer-events: none; }
 .toast.show { transform: translate(-50%, 0); opacity: 1; }
 .toast.error { background: var(--neg); color: #fff; }
 
+/* Penga-konfetti */
+.confetti { position: fixed; inset: 0; z-index: 30; pointer-events: none; overflow: hidden; }
+.confetti-piece { position: absolute; translate: -50% -50%; will-change: transform, opacity; }
+
 /* Quests */
 .quest.ready { box-shadow: inset 0 0 0 2px var(--accent); }
 .quest-head { display: flex; align-items: center; gap: 12px; }
