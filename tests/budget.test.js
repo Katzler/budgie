@@ -52,7 +52,7 @@ test("startdag 1 som hamnar på helg flyttas in i föregående månad", () => {
 /** Lönemånaden 25 nov–24 dec 2026, startsaldo 0 och en lön som kommer in. */
 function allocState({ buckets, income = 0, allocations = [], transactions = [], today = "2026-11-25", start_date = "2026-10-27" }) {
   return {
-    settings: { start_date, start_balance: 0, period_start_day: 25 },
+    settings: { start_date, start_balance: 0, period_start_day: 25, auto_allocate: true },
     buckets: buckets.map((b, i) => ({ kind: "spending", monthly_amount: 0, cap_amount: null, overflow_rank: null, sort_order: i, name: b.id, ...b })),
     allocations,
     transfers: [],
@@ -148,6 +148,12 @@ test("lön som kommer sista veckan väntar till nästa lönemånad", () => {
   eq(r.rows, []);
   eq(r.waitUntil, "2026-12-25");
   eq(autoAllocate({ ...s, today: "2026-12-25" }).added.length, 1);
+});
+
+test("inget fördelas när automatiken är avslagen", () => {
+  const s = allocState({ income: 1000000, buckets: [{ id: "mat", monthly_amount: 700000 }] });
+  s.settings.auto_allocate = false;
+  eq(autoAllocate(s), { rows: [], added: [], waitUntil: null });
 });
 
 test("inget fördelas när Att fördela är tomt eller negativt", () => {

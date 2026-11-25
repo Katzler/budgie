@@ -105,13 +105,14 @@ export const HOLD_DAYS = 7;
  *  2. Överskott: det som blir kvar går till hinkar med överskottsordning
  *     1, 2, 3 … upp till taket. Hinkar med samma ordning delar lika.
  *
- * En period som började före startdatumet fördelas inte; den fylldes på
- * för hand. Raderna är periodens nya totalbelopp per hink och källa, så
+ * Inget fördelas om inte `settings.auto_allocate` är på. En period som
+ * började före startdatumet fördelas inte; den fylldes på för hand. Raderna är periodens nya totalbelopp per hink och källa, så
  * samma tillstånd ger alltid samma rader och dubbla körningar gör inget.
  * `added` är det som lades till nu, `waitUntil` när en pausad fördelning sker.
  */
 export function autoAllocate(state) {
   const { settings, allocations } = state;
+  if (!settings.auto_allocate) return { rows: [], added: [], waitUntil: null };
   const budget = computeBudget(state);
   const { start, end } = budget.period;
   const out = { rows: [], added: [], waitUntil: null };

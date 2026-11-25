@@ -713,7 +713,11 @@ function viewSettings() {
         <a class="row add" href="#/installningar/hink/ny">${icon("plus", 2)}Ny hink</a>
       </div>
       <p class="muted small">Tryck på en hink på startsidan och välj Ändra för belopp och tak. Håll inne en hink för att ändra ordningen.</p>
-      <p class="muted small">När lönen kommer fylls hinkarna med sitt månadsbelopp uppifrån och ned inom varje grupp, de privata sist, och aldrig över taket. Det som blir över går till hinkarna med överskott 1, sedan 2 och så vidare; samma nummer delar lika. De sista ${HOLD_DAYS} dagarna före lönedagen väntar fördelningen till nästa månad.</p>
+      <p class="muted small">${
+        st.auto_allocate
+          ? `När lönen kommer fylls hinkarna med sitt månadsbelopp uppifrån och ned inom varje grupp, de privata sist, och aldrig över taket. Det som blir över går till hinkarna med överskott 1, sedan 2 och så vidare; samma nummer delar lika. De sista ${HOLD_DAYS} dagarna före lönedagen väntar fördelningen till nästa månad.`
+          : "Lönen hamnar i Att fördela och ni fördelar den själva. Automatisk fördelning slås på under Budget nedan."
+      }</p>
 
       <h2 class="section">Sortering och bank</h2>
       <div class="card list">
@@ -731,6 +735,7 @@ function viewSettings() {
       <h2 class="section">Budget</h2>
       <form class="card form" data-submit="budget">
         <label>Lönedag (månaden börjar)<input name="day" type="number" min="1" max="28" value="${st.period_start_day}"></label>
+        <label class="toggle"><input name="auto" type="checkbox"${st.auto_allocate ? " checked" : ""}> Fördela lönen automatiskt</label>
         <p class="muted small">Saldot följer banken. Stämmer det inte visas en knapp på startsidan som justerar Att fördela.</p>
         <button class="btn" type="submit">Spara</button>
       </form>
@@ -750,7 +755,7 @@ function viewSettings() {
       run(async () => {
         const day = Number(f.get("day"));
         if (!(day >= 1 && day <= 28)) throw new Error("Lönedagen måste vara 1–28");
-        await S.store.update("settings", { id: 1 }, { period_start_day: day });
+        await S.store.update("settings", { id: 1 }, { period_start_day: day, auto_allocate: f.get("auto") === "on" });
         toast("Sparat");
         await refresh();
       }),
